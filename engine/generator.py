@@ -47,8 +47,7 @@ def generate_video(
                     duration_seconds=str(duration_seconds),
                     number_of_videos=1,
                     output_gcs_uri=output_gcs_uri,
-                    negative_prompt=negative_prompt,
-                    enhance_prompt=False
+                    negative_prompt=negative_prompt
                 )
 
                 operation = client.models.generate_videos(
