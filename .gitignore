@@ -1,0 +1,27 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.class
+*.env
+.env.local
+.venv/
+venv/
+env/
+
+# GCP Credentials & Secrets
+*.json
+!grafana/dashboards/*.json
+gcp-key.json
+service_account*.json
+
+# Video & Temp Files
+temp_*
+*.mp4
+*.avi
+*.mov
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

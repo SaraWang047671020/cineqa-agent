@@ -1,0 +1,29 @@
+# CineQA-Agent: Agentic Cinema Quality & Observability Platform
+# Core Google & LLM Dependencies (100% Free / Google)
+google-genai>=1.0.0
+google-cloud-aiplatform>=1.70.0
+
+# Conformal Prediction & Uncertainty Quantification
+mapie>=0.9.0
+scikit-learn>=1.4.0
+numpy>=1.24.0
+scipy>=1.11.0
+
+# Observability & Grafana Ecosystem (Prometheus + OpenTelemetry)
+prometheus-client>=0.20.0
+opentelemetry-api>=1.25.0
+opentelemetry-sdk>=1.25.0
+opentelemetry-exporter-prometheus>=0.46b0
+opentelemetry-instrumentation>=0.46b0
+
+# Video Processing & Computer Vision (Open Source)
+opencv-python>=4.9.0
+ffmpeg-python>=0.2.0
+pillow>=10.2.0
+
+# Application, UI & Orchestration
+streamlit>=1.35.0
+pydantic>=2.7.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+tqdm>=4.66.0
