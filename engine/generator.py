@@ -118,6 +118,7 @@ def generate_video(
                 "negative_prompt_applied": negative_prompt
             }
 
+        create_bulletproof_sample_clip(local_out_path)
         return {
             "status": "SUCCESS",
             "video_path": os.path.abspath(local_out_path),

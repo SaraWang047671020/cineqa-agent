@@ -331,13 +331,23 @@ if "healed_video_path" in st.session_state and "original_video_path" in st.sessi
     with col_after:
         st.markdown("#### ✅ Take 2: Google VEO 2 Auto-Healed Take (Passed)")
         heal_p = st.session_state["healed_video_path"]
+        orig_heal_p_debug = heal_p
+        
         if not os.path.isabs(heal_p):
             root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
             heal_p = os.path.join(root_dir, heal_p)
             
-        if os.path.exists(heal_p) and os.path.getsize(heal_p) > 100:
-            with open(heal_p, "rb") as vf:
-                st.video(vf.read(), format="video/mp4")
+        exists = os.path.exists(heal_p)
+        fsize = os.path.getsize(heal_p) if exists else 0
+        
+        st.info(f"DEBUG INFO:\nOriginal path: {orig_heal_p_debug}\nResolved path: {heal_p}\nExists: {exists}\nSize: {fsize} bytes")
+        
+        if exists and fsize > 100:
+            try:
+                with open(heal_p, "rb") as vf:
+                    st.video(vf.read(), format="video/mp4")
+            except Exception as e:
+                st.error(f"Error loading video: {e}")
         else:
             st.warning(f"Healed video take is being generated or ready at: {heal_p}")
             
