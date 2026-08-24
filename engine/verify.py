@@ -1,5 +1,6 @@
 """Frame Verification Engine: Evaluates atomic claims against video frames & reference concept art.
-Integrates MAPIE 1.5.0 Conformal Decision Layer for mathematically sound verdict determination.
+Implements the 5-Step Mandatory Verification Protocol with screen coordinate anchoring,
+causal forward progression, inequality bounding, and MAPIE 1.5.0 Conformal Decision Layer.
 """
 
 import json
@@ -16,13 +17,33 @@ VALID_VERDICTS = {"MATCH", "MISMATCH", "CANNOT_DETERMINE"}
 
 VERIFY_PROMPT = (
     'Claim to verify: "{claim_text}"\n\n'
-    "The frames are attached in chronological order. (If reference storyboard/concept art images are provided, they are labeled as REFERENCE_IMAGE_X).\n\n"
-    "Judge whether this claim is true, following these steps in order:\n\n"
-    "1. Break the claim down into every specific sub-fact that must individually hold true.\n"
-    "2. If this claim involves matching a character appearance or storyboard layout from reference images, explicitly compare the video frames against the reference image anchors.\n"
-    "3. Left/right judgments must ALWAYS be defined from the VIEWER's perspective looking at the screen.\n"
-    "4. Check for causal order consistency: cause must lead forward into effect.\n"
-    "5. Output verdict (MATCH / MISMATCH / CANNOT_DETERMINE) with observed evidence."
+    "The video frames are attached in chronological order. "
+    "(If reference storyboard/character concept art images are provided, they are labeled as REFERENCE_IMAGE_X).\n\n"
+    "You MUST execute the following 5-Step Mandatory Verification Protocol in exact sequential order before determining your final verdict:\n\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    "STEP 1: SUB-FACT DECOMPOSITION & CONSTRAINT PRE-REGISTRATION\n"
+    "• Break down the claim into atomic sub-facts that must each individually hold true.\n"
+    "• Wearing/Holding relations: Check for physical contact/attachment. Verify there is no mesh clipping (e.g. blade clipping through palm instead of being gripped).\n"
+    "• Temporal changes: Explicitly compare early frames (t0) vs late frames (t_end); never judge state transitions from a single frame.\n"
+    "• Causal events (collision, fracture, ignition, transformation): Pre-register the canonical causal timeline (Cause -> Intermediate -> Effect).\n"
+    "• Count claims: Count only prominent, salient entity instances. Ignore distant background noise pixels, but count distinct intended scene elements.\n"
+    "• Multimodal Reference Art: If REFERENCE_IMAGE is present, anchor character hair/attire/layout against the reference art.\n\n"
+    "STEP 2: OBJECTIVE OBSERVATION & COORDINATE ANCHORING (NO PREMATURE CONCLUSIONS)\n"
+    "• Screen-Space Orientation: Left and Right are ALWAYS defined strictly from the VIEWER\'S PERSPECTIVE looking at the screen (Viewer Left / Viewer Right), NEVER the subject\'s anatomical perspective.\n"
+    "• Horizontal Movement Anchoring: For motion claims, explicitly record the subject\'s horizontal position in the first frame vs final frame (e.g. Left Edge X:15% -> Right Edge X:85%).\n"
+    "• Camera Motion Disentanglement: Distinguish between camera panning/tracking vs subject locomotion in the scene.\n\n"
+    "STEP 3: EVIDENCE SUFFICIENCY & INEQUALITY BOUNDING\n"
+    "• Partial Visibility: A full 100% silhouette outline is not required if the specific relation/attribute is unmistakable.\n"
+    "• Lower-Bound Claims ('at least N times bigger/taller'): If the cropped/partially visible entity is the one required to be larger and its visible portion already exceeds the threshold, unobserved portions only increase the true size -> counts as SUFFICIENT evidence.\n"
+    "• Depth Perspective Check: Ensure entities being compared reside on the same focal/depth plane to rule out foreshortening/perspective distortions.\n\n"
+    "STEP 4: LOCALIZED AI ARTIFACT DISCRIMINATION\n"
+    "• Set `artifacts_affect_judgment=true` ONLY if AI generation defects (morphing, limb fusion, blur) occur directly in the spatial-temporal ROI needed to verify this claim.\n"
+    "• If the core sub-fact is clearly verifiable in clean frames/regions, unrelated background artifacts do NOT invalidate the judgment.\n\n"
+    "STEP 5: VERDICT FORMULATION & REVERSE-DIFFUSION CAUSAL CHECK\n"
+    "• Output MATCH if and only if ALL sub-facts hold true with verified forward causality.\n"
+    "• Output MISMATCH if any sub-fact is contradicted, OR if a causal event displays reverse motion/un-breaking (e.g. debris assembling back into an intact object instead of shattering).\n"
+    "• Output CANNOT_DETERMINE only if evidence is genuinely insufficient or localized artifacts obstruct evaluation. Do not abuse abstention out of generic caution.\n"
+    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 )
 
 VERIFY_RESPONSE_SCHEMA = {
@@ -31,21 +52,27 @@ VERIFY_RESPONSE_SCHEMA = {
         "checkable_components": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "the specific sub-facts that must each individually hold true",
+            "description": "The specific atomic sub-facts that must each individually hold true",
         },
         "frame_observations": {
             "type": "string",
-            "description": "what is actually observed across the frames for each sub-fact",
+            "description": "Objective observations across frames with viewer-perspective coordinate tracking",
         },
         "all_required_subjects_fully_visible": {"type": "boolean"},
-        "artifacts_affect_judgment": {"type": "boolean"},
-        "event_causal_order": {"type": "string"},
+        "artifacts_affect_judgment": {
+            "type": "boolean",
+            "description": "True only if localized artifacts directly obstruct verification of this specific claim"
+        },
+        "event_causal_order": {
+            "type": "string",
+            "description": "Detailed analysis of forward causality (Cause -> Effect) vs reverse motion check"
+        },
         "concept_art_consistency": {
             "type": "string",
-            "description": "Analysis of character/storyboard consistency against reference art (if applicable)"
+            "description": "Analysis of character/storyboard feature alignment against reference images (if present)"
         },
         "verdict": {"type": "string", "enum": ["MATCH", "MISMATCH", "CANNOT_DETERMINE"]},
-        "observed": {"type": "string", "description": "concise final summary of what you saw"},
+        "observed": {"type": "string", "description": "Concise final synthesis of observed visual evidence"},
         "confidence": {
             "type": "number",
             "description": "Self-reported confidence on a 0.0 to 1.0 scale",
@@ -111,11 +138,11 @@ def call_gemini_verify(
             "verdict": "MATCH",
             "observed": "[Dry-run simulated verification]",
             "confidence": 0.95,
-            "checkable_components": ["component_1"],
-            "frame_observations": "Simulation observed consistent attributes.",
+            "checkable_components": ["atomic_component_1"],
+            "frame_observations": "Simulation observed consistent attributes with viewer coordinate alignment.",
             "all_required_subjects_fully_visible": True,
             "artifacts_affect_judgment": False,
-            "event_causal_order": "consistent"
+            "event_causal_order": "Verified forward causal progression without reverse artifacts."
         }
 
     from google import genai
