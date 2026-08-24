@@ -246,9 +246,10 @@ if "verification_ledger" in st.session_state:
                     with st.spinner("🚀 Google VEO 2 is generating remediated video take with negative constraints..."):
                         try:
                             ref_img = st.session_state.get("ref_image_paths", [None])[0] if st.session_state.get("ref_image_paths") else None
+                            current_plan = st.session_state.get("rem_plan", {})
                             gen_res = generate_video(
-                                prompt=plan.get("refined_positive_prompt", scene_text),
-                                negative_prompt=plan.get("negative_prompt", ""),
+                                prompt=current_plan.get("refined_positive_prompt", scene_text),
+                                negative_prompt=current_plan.get("negative_prompt", ""),
                                 reference_image_path=ref_img,
                                 use_live_veo=live_veo_toggle
                             )
@@ -259,7 +260,7 @@ if "verification_ledger" in st.session_state:
                             # Automatically Re-Inspect the Healed Take
                             healed_frames_dir = Path("temp_eval/frames_healed")
                             healed_ledger = run_pipeline(
-                                scene_text=plan.get("refined_positive_prompt", scene_text),
+                                scene_text=current_plan.get("refined_positive_prompt", scene_text),
                                 video_path=healed_video_path,
                                 frames_dir=str(healed_frames_dir),
                                 dry_run=True
@@ -287,8 +288,9 @@ if "verification_ledger" in st.session_state:
                     if st.button("⚖️ Run Verification on Uploaded Take 2", use_container_width=True):
                         with st.spinner("Verifying Uploaded Take 2 against 4-Tier Critical Path..."):
                             healed_frames_dir = Path("temp_eval/frames_healed")
+                            current_plan = st.session_state.get("rem_plan", {})
                             healed_ledger = run_pipeline(
-                                scene_text=plan.get("refined_positive_prompt", scene_text),
+                                scene_text=current_plan.get("refined_positive_prompt", scene_text),
                                 video_path=manual_heal_p,
                                 frames_dir=str(healed_frames_dir),
                                 dry_run=dry_run
