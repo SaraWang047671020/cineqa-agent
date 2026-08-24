@@ -1,6 +1,6 @@
 """Frame Verification Engine: Evaluates atomic claims against video frames & reference concept art.
-Implements the 5-Step Mandatory Verification Protocol with screen coordinate anchoring,
-causal forward progression, inequality bounding, and MAPIE 1.5.0 Conformal Decision Layer.
+Implements 5-Step Mandatory Verification Protocol with high-density adaptive sampling,
+fluid dynamics verification, incidental actor non-interference, and MAPIE 1.5.0 Conformal Decision Layer.
 """
 
 import json
@@ -21,10 +21,11 @@ VERIFY_PROMPT = (
     "(If reference storyboard/character concept art images are provided, they are labeled as REFERENCE_IMAGE_X).\n\n"
     "You MUST execute the following 5-Step Mandatory Verification Protocol in exact sequential order before determining your final verdict:\n\n"
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-    "STEP 1: SUB-FACT DECOMPOSITION & CONSTRAINT PRE-REGISTRATION\n"
+    "STEP 1: SUB-FACT DECOMPOSITION & PHYSICAL DYNAMICS PRE-REGISTRATION\n"
     "• Break down the claim into atomic sub-facts that must each individually hold true.\n"
+    "• Fluid & Liquid Dynamics (CRITICAL): Liquid flow, dripping, or bleeding requires ACTIVE, CONTINUOUS DOWNWARD DISPLACEMENT of liquid across sequential frames under gravity. Static blood stains, painted red streaks, or stationary droplets that remain frozen in position do NOT constitute 'flowing/dripping' -> mark as fluid physics failure.\n"
     "• Wearing/Holding relations: Check for physical contact/attachment. Verify there is no mesh clipping (e.g. blade clipping through palm instead of being gripped).\n"
-    "• Temporal changes: Explicitly compare early frames (t0) vs late frames (t_end); never judge state transitions from a single frame.\n"
+    "• Temporal changes: Explicitly compare early frames (t0) vs late frames (t_end); check intermediate frames for transient micro-events.\n"
     "• Causal events (collision, fracture, ignition, transformation): Pre-register the canonical causal timeline (Cause -> Intermediate -> Effect).\n"
     "• Count claims: Count only prominent, salient entity instances. Ignore distant background noise pixels, but count distinct intended scene elements.\n"
     "• Multimodal Reference Art: If REFERENCE_IMAGE is present, anchor character hair/attire/layout against the reference art.\n\n"
@@ -32,16 +33,17 @@ VERIFY_PROMPT = (
     "• Screen-Space Orientation: Left and Right are ALWAYS defined strictly from the VIEWER\'S PERSPECTIVE looking at the screen (Viewer Left / Viewer Right), NEVER the subject\'s anatomical perspective.\n"
     "• Horizontal Movement Anchoring: For motion claims, explicitly record the subject\'s horizontal position in the first frame vs final frame (e.g. Left Edge X:15% -> Right Edge X:85%).\n"
     "• Camera Motion Disentanglement: Distinguish between camera panning/tracking vs subject locomotion in the scene.\n\n"
-    "STEP 3: EVIDENCE SUFFICIENCY & INEQUALITY BOUNDING\n"
+    "STEP 3: EVIDENCE SUFFICIENCY, INEQUALITY BOUNDING & INCIDENTAL ACTORS\n"
     "• Partial Visibility: A full 100% silhouette outline is not required if the specific relation/attribute is unmistakable.\n"
+    "• Incidental Actor Tolerance (CRITICAL): If the target entity and its verified action hold true in the primary action window, late-frame peripheral appearances (e.g. incidental hand entering frame, background ambient motion) do NOT invalidate the claim unless the claim explicitly specified 'in complete isolation' or 'no hands'.\n"
     "• Lower-Bound Claims ('at least N times bigger/taller'): If the cropped/partially visible entity is the one required to be larger and its visible portion already exceeds the threshold, unobserved portions only increase the true size -> counts as SUFFICIENT evidence.\n"
     "• Depth Perspective Check: Ensure entities being compared reside on the same focal/depth plane to rule out foreshortening/perspective distortions.\n\n"
     "STEP 4: LOCALIZED AI ARTIFACT DISCRIMINATION\n"
     "• Set `artifacts_affect_judgment=true` ONLY if AI generation defects (morphing, limb fusion, blur) occur directly in the spatial-temporal ROI needed to verify this claim.\n"
     "• If the core sub-fact is clearly verifiable in clean frames/regions, unrelated background artifacts do NOT invalidate the judgment.\n\n"
     "STEP 5: VERDICT FORMULATION & REVERSE-DIFFUSION CAUSAL CHECK\n"
-    "• Output MATCH if and only if ALL sub-facts hold true with verified forward causality.\n"
-    "• Output MISMATCH if any sub-fact is contradicted, OR if a causal event displays reverse motion/un-breaking (e.g. debris assembling back into an intact object instead of shattering).\n"
+    "• Output MATCH if and only if ALL sub-facts hold true with verified physical motion and forward causality.\n"
+    "• Output MISMATCH if any sub-fact is contradicted (e.g. static blood texture instead of active flowing liquid), OR if a causal event displays reverse motion/un-breaking (e.g. debris assembling back into an intact object instead of shattering).\n"
     "• Output CANNOT_DETERMINE only if evidence is genuinely insufficient or localized artifacts obstruct evaluation. Do not abuse abstention out of generic caution.\n"
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 )
@@ -56,7 +58,7 @@ VERIFY_RESPONSE_SCHEMA = {
         },
         "frame_observations": {
             "type": "string",
-            "description": "Objective observations across frames with viewer-perspective coordinate tracking",
+            "description": "Objective observations across frames with viewer-perspective coordinate tracking and fluid motion analysis",
         },
         "all_required_subjects_fully_visible": {"type": "boolean"},
         "artifacts_affect_judgment": {
@@ -105,10 +107,18 @@ def extract_frames(video_path: str, out_dir: str, temporal: str, claim_id: str) 
     duration = get_clip_duration(str(video_path))
 
     if temporal == "static":
-        timestamps = [duration * 0.1, duration * 0.5, duration * 0.9]
+        # 5 well-spaced frames to ensure micro-details and early/late stability are captured
+        timestamps = [
+            duration * 0.08, 
+            duration * 0.28, 
+            duration * 0.50, 
+            duration * 0.72, 
+            duration * 0.92
+        ]
     else:
-        step = 0.4
-        n = max(1, int(duration / step))
+        # High-density 0.2s temporal sampling (up to 20 frames) to capture fast projectiles & micro-actions
+        step = 0.20
+        n = max(1, min(20, int(duration / step)))
         timestamps = [min(i * step, duration - 0.05) for i in range(n)]
 
     frame_paths = []
@@ -139,7 +149,7 @@ def call_gemini_verify(
             "observed": "[Dry-run simulated verification]",
             "confidence": 0.95,
             "checkable_components": ["atomic_component_1"],
-            "frame_observations": "Simulation observed consistent attributes with viewer coordinate alignment.",
+            "frame_observations": "Simulation observed consistent attributes with viewer coordinate alignment and active physical motion.",
             "all_required_subjects_fully_visible": True,
             "artifacts_affect_judgment": False,
             "event_causal_order": "Verified forward causal progression without reverse artifacts."
