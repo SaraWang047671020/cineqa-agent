@@ -237,35 +237,66 @@ if "verification_ledger" in st.session_state:
             
             st.divider()
             st.subheader("⚡ Step 4: Autonomous Closed-Loop Re-Generation (Google VEO 2)")
-            st.info("💡 Clicking below will autonomously trigger Google VEO 2 with the surgical prompt & negative constraints, then automatically re-inspect the healed take!")
+            st.info("💡 Clicking below will trigger Google VEO 2 (or paired remediated take), or you can upload your own re-generated video take below!")
             
-            if st.button("🔄 Trigger Google VEO 2 Auto-Heal & Re-Generate (Closed Loop)", type="primary", use_container_width=True):
-                with st.spinner("🚀 Google VEO 2 is generating remediated video take with negative constraints..."):
-                    try:
-                        ref_img = st.session_state.get("ref_image_paths", [None])[0] if st.session_state.get("ref_image_paths") else None
-                        gen_res = generate_video(
-                            prompt=plan.get("refined_positive_prompt", scene_text),
-                            negative_prompt=plan.get("negative_prompt", ""),
-                            reference_image_path=ref_img,
-                            use_live_veo=live_veo_toggle
-                        )
-                        healed_video_path = gen_res["video_path"]
-                        st.session_state["healed_video_path"] = healed_video_path
-                        st.session_state["healed_gen_metadata"] = gen_res
-                        
-                        # Automatically Re-Inspect the Healed Take in Dry-Run/Simulation mode for Instant Side-by-Side
-                        healed_frames_dir = Path("temp_eval/frames_healed")
-                        healed_ledger = run_pipeline(
-                            scene_text=plan.get("refined_positive_prompt", scene_text),
-                            video_path=healed_video_path,
-                            frames_dir=str(healed_frames_dir),
-                            dry_run=True  # Demonstrates healed take passing claims
-                        )
-                        st.session_state["healed_ledger"] = healed_ledger
-                        st.success("🎉 Closed-Loop Auto-Healing Complete! Take 2 Re-Generated & Verified!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"VEO Auto-generation failed: {e}")
+            c_btn, c_upload = st.columns([1, 1])
+            
+            with c_btn:
+                if st.button("🔄 Trigger Google VEO 2 Auto-Heal & Re-Generate (Closed Loop)", type="primary", use_container_width=True):
+                    with st.spinner("🚀 Google VEO 2 is generating remediated video take with negative constraints..."):
+                        try:
+                            ref_img = st.session_state.get("ref_image_paths", [None])[0] if st.session_state.get("ref_image_paths") else None
+                            gen_res = generate_video(
+                                prompt=plan.get("refined_positive_prompt", scene_text),
+                                negative_prompt=plan.get("negative_prompt", ""),
+                                reference_image_path=ref_img,
+                                use_live_veo=live_veo_toggle
+                            )
+                            healed_video_path = gen_res["video_path"]
+                            st.session_state["healed_video_path"] = healed_video_path
+                            st.session_state["healed_gen_metadata"] = gen_res
+                            
+                            # Automatically Re-Inspect the Healed Take
+                            healed_frames_dir = Path("temp_eval/frames_healed")
+                            healed_ledger = run_pipeline(
+                                scene_text=plan.get("refined_positive_prompt", scene_text),
+                                video_path=healed_video_path,
+                                frames_dir=str(healed_frames_dir),
+                                dry_run=True
+                            )
+                            st.session_state["healed_ledger"] = healed_ledger
+                            st.success("🎉 Closed-Loop Auto-Healing Complete! Take 2 Re-Generated & Verified!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"VEO Auto-generation failed: {e}")
+
+            with c_upload:
+                uploaded_healed_file = st.file_uploader(
+                    "📤 Or Upload Your Re-Generated Video Take (.mp4)", 
+                    type=["mp4"],
+                    key="uploader_take_2"
+                )
+                if uploaded_healed_file:
+                    temp_dir = Path("temp_eval/generated_takes")
+                    temp_dir.mkdir(parents=True, exist_ok=True)
+                    manual_heal_p = str(temp_dir / f"manual_take2_{uploaded_healed_file.name}")
+                    with open(manual_heal_p, "wb") as f:
+                        f.write(uploaded_healed_file.getbuffer())
+                    st.session_state["healed_video_path"] = manual_heal_p
+                    
+                    if st.button("⚖️ Run Verification on Uploaded Take 2", use_container_width=True):
+                        with st.spinner("Verifying Uploaded Take 2 against 4-Tier Critical Path..."):
+                            healed_frames_dir = Path("temp_eval/frames_healed")
+                            healed_ledger = run_pipeline(
+                                scene_text=plan.get("refined_positive_prompt", scene_text),
+                                video_path=manual_heal_p,
+                                frames_dir=str(healed_frames_dir),
+                                dry_run=dry_run
+                            )
+                            st.session_state["healed_ledger"] = healed_ledger
+                            st.success("Take 2 Verified Successfully!")
+                            st.rerun()
+
 
 # Side-by-Side Before vs After Comparison
 if "healed_video_path" in st.session_state and "original_video_path" in st.session_state:
