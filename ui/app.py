@@ -86,6 +86,11 @@ with col1:
             try:
                 claims = extract_claims(scene_text, reference_image_paths=st.session_state.get("ref_image_paths", []))
                 st.session_state["extracted_claims"] = claims
+                try:
+                    with open("temp_eval/latest_extracted_claims.json", "w", encoding="utf-8") as fh:
+                        json.dump(claims, fh, indent=2, ensure_ascii=False)
+                except Exception:
+                    pass
                 st.success(f"Successfully extracted {len(claims)} decisive Critical Path claims (Budget Controlled)!")
             except Exception as e:
                 st.error(f"Claim extraction failed: {e}")
@@ -157,6 +162,11 @@ with col2:
                         expanded=False
                     )
                     st.session_state["verification_ledger"] = ledger
+                    try:
+                        with open("temp_eval/latest_verification_ledger.json", "w", encoding="utf-8") as fh:
+                            json.dump(ledger, fh, indent=2, ensure_ascii=False)
+                    except Exception:
+                        pass
                     st.rerun()
                 except Exception as e:
                     status_box.update(label="❌ Verification Pipeline Error", state="error")
@@ -266,7 +276,13 @@ if "healed_video_path" in st.session_state and "original_video_path" in st.sessi
     
     with col_before:
         st.markdown("#### ❌ Take 1: Original Take (Failed Inspection)")
-        st.video(st.session_state["original_video_path"])
+        orig_p = st.session_state["original_video_path"]
+        if os.path.exists(orig_p):
+            with open(orig_p, "rb") as vf:
+                st.video(vf.read())
+        else:
+            st.warning(f"Original video not found on disk: {orig_p}")
+            
         orig_ledger = st.session_state.get("verification_ledger", [])
         orig_matches = sum(1 for r in orig_ledger if r.get("verdict") == "MATCH")
         orig_rate = (orig_matches / len(orig_ledger) * 100) if orig_ledger else 0
@@ -277,10 +293,16 @@ if "healed_video_path" in st.session_state and "original_video_path" in st.sessi
 
     with col_after:
         st.markdown("#### ✅ Take 2: Google VEO 2 Auto-Healed Take (Passed)")
-        st.video(st.session_state["healed_video_path"])
+        heal_p = st.session_state["healed_video_path"]
+        if os.path.exists(heal_p):
+            with open(heal_p, "rb") as vf:
+                st.video(vf.read())
+        else:
+            st.warning(f"Healed video not found on disk: {heal_p}")
+            
         healed_ledger = st.session_state.get("healed_ledger", [])
         healed_matches = sum(1 for r in healed_ledger if r.get("verdict") == "MATCH")
         healed_rate = 100.0  # Demonstrates healed resolution
         st.success(f"Adherence Rate: {healed_rate:.1f}% ({len(healed_ledger)}/{len(healed_ledger)} Claims Passed)")
         st.write("• ✅ All 4-Tier Critical Path Claims Verified & Resolved.")
-        st.write(f"• 💰 **Estimated GPU Savings**: `$12.50 USD` (Avoided 5 blind re-rolls)")
+        st.write("• 💰 **Estimated GPU Savings**: `$12.50 USD` (Avoided 5 blind re-rolls)")
