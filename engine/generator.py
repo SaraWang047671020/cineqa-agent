@@ -29,7 +29,7 @@ def generate_video(
     Generates video takes using live Google Vertex AI Veo 3.1, exports to GCS bucket,
     and automatically downloads the .mp4 file to local disk for instant verification & playback.
     """
-    out_path_dir = Path(out_dir).resolve()
+    out_path_dir = Path(os.path.abspath(out_dir))
     out_path_dir.mkdir(parents=True, exist_ok=True)
     
     timestamp = int(time.time())
@@ -101,7 +101,7 @@ def generate_video(
                 print(f"[CineQA Veo] Live Veo exception: {e}. Falling back to paired candidate...")
 
         # Fallback to local real take or synthesized clip if offline
-        temp_eval_dir = Path("temp_eval").resolve()
+        temp_eval_dir = Path(os.path.abspath("temp_eval"))
         candidate_real_takes = [p for p in temp_eval_dir.glob("*.mp4") if "remediated" not in p.name]
         if candidate_real_takes:
             best_take = max(candidate_real_takes, key=lambda p: p.stat().st_size)
