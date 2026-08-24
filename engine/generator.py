@@ -46,7 +46,9 @@ def generate_video(
                     aspect_ratio=aspect_ratio,
                     duration_seconds=str(duration_seconds),
                     number_of_videos=1,
-                    output_gcs_uri=output_gcs_uri
+                    output_gcs_uri=output_gcs_uri,
+                    negative_prompt=negative_prompt,
+                    enhance_prompt=False
                 )
 
                 operation = client.models.generate_videos(

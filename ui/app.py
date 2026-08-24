@@ -263,7 +263,7 @@ if "verification_ledger" in st.session_state:
                                 scene_text=current_plan.get("refined_positive_prompt", scene_text),
                                 video_path=healed_video_path,
                                 frames_dir=str(healed_frames_dir),
-                                dry_run=True
+                                dry_run=dry_run
                             )
                             st.session_state["healed_ledger"] = healed_ledger
                             st.success("🎉 Closed-Loop Auto-Healing Complete! Take 2 Re-Generated & Verified!")
