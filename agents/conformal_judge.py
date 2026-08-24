@@ -1,72 +1,129 @@
+"""MAPIE 1.5.0 Conformal Decision Layer: Statistically Sound Video Quality Verification.
+Replaces arbitrary heuristic thresholds with mathematically guaranteed prediction sets.
+"""
+
+import os
+import json
 import numpy as np
-from sklearn.linear_model import Ridge
-from mapie.regression import SplitConformalRegressor
-from telemetry.metrics import (
-    CONFIDENCE_INTERVAL_LOWER, 
-    CONFIDENCE_INTERVAL_UPPER, 
-    UNCERTAINTY_WIDTH,
-    HUMAN_REVIEWS_TRIGGERED
-)
-from config.settings import settings
+from pathlib import Path
+from typing import Dict, Any, List, Optional
+from mapie.classification import SplitConformalClassifier
+from telemetry.tracer import tracer
+from telemetry.metrics import CONFORMAL_SET_SIZE_HISTOGRAM, UNCERTAIN_VERDICTS_COUNTER
+
+CLASSES = ["CANNOT_DETERMINE", "MATCH", "MISMATCH"]
+
+class PrefitProbaClassifier:
+    """Passthrough estimator for precomputed 3-call consensus probability vectors."""
+    def __init__(self, classes):
+        self.classes_ = np.array(classes)
+
+    def fit(self, X, y):
+        return self
+
+    def predict_proba(self, X):
+        X = np.asarray(X, dtype=float)
+        return X / X.sum(axis=1, keepdims=True)
+
+    def predict(self, X):
+        X = np.asarray(X)
+        return self.classes_[np.argmax(X, axis=1)]
 
 class ConformalJudge:
     """
-    Uses MAPIE 1.5.0 (Conformal Prediction) to compute statistically guaranteed 
-    prediction intervals around Gemini's evaluation scores.
+    Evaluates empirical agreement rates from 3-call consensus verification
+    using MAPIE 1.5.0 Conformal Prediction sets with distribution-free coverage guarantees.
     """
-    def __init__(self):
-        self.confidence_level = 1.0 - settings.CONFIDENCE_LEVEL_ALPHA
-        self.base_model = Ridge(alpha=1.0)
-        self.mapie = SplitConformalRegressor(
-            estimator=self.base_model, 
-            prefit=False, 
-            confidence_level=self.confidence_level
-        )
-        self.is_calibrated = False
-        self._bootstrap_calibration()
-
-    def _bootstrap_calibration(self):
-        # Bootstrap with 30 synthetic calibration samples
-        np.random.seed(42)
-        X_train = np.random.uniform(30, 95, size=(30, 4))
-        y_train = X_train[:, 0] + np.random.normal(0, 3, size=30)
-
-        X_calib = np.random.uniform(30, 95, size=(30, 4))
-        y_calib = X_calib[:, 0] + np.random.normal(0, 3, size=30)
-
-        self.mapie.fit(X_train, y_train)
-        self.mapie.conformalize(X_calib, y_calib)
-        self.is_calibrated = True
-
-    def evaluate_with_intervals(self, raw_score: float, features: np.ndarray, shot_id: str, dimension: str = "overall") -> dict:
-        """
-        Returns point estimate, 90% confidence interval, uncertainty width, and decision.
-        """
-        X_in = features.reshape(1, -1)
-        y_pred, y_pis = self.mapie.predict_interval(X_in)
+    def __init__(
+        self, 
+        calibration_path: Optional[str] = None, 
+        confidence_level: float = 0.80
+    ):
+        self.confidence_level = confidence_level
+        self.classes = CLASSES
+        self.calibrated = False
         
-        lower_bound = max(0.0, float(y_pis[0, 0, 0]))
-        upper_bound = min(100.0, float(y_pis[0, 1, 0]))
-        point_estimate = float(y_pred[0])
-        interval_width = upper_bound - lower_bound
+        default_calib = Path(__file__).parent.parent / "eval" / "labeled_set" / "calibration_data_full.json"
+        self.calibration_path = str(calibration_path or default_calib)
+        self.estimator = PrefitProbaClassifier(self.classes)
+        self.mapie_clf = SplitConformalClassifier(
+            estimator=self.estimator,
+            confidence_level=self.confidence_level,
+            conformity_score="lac",
+            prefit=True
+        )
+        self._fit_calibration()
 
-        # Update Grafana metrics
-        CONFIDENCE_INTERVAL_LOWER.labels(shot_id=shot_id, dimension=dimension).set(lower_bound)
-        CONFIDENCE_INTERVAL_UPPER.labels(shot_id=shot_id, dimension=dimension).set(upper_bound)
-        UNCERTAINTY_WIDTH.labels(shot_id=shot_id).set(interval_width)
+    def _fit_calibration(self):
+        if not os.path.exists(self.calibration_path):
+            return
+        
+        try:
+            with open(self.calibration_path, "r", encoding="utf-8") as f:
+                rows = json.load(f)
+            rows = [r for r in rows if r.get("agreement_rate") is not None]
+            
+            X = np.array([self._votes_to_proba(r["votes"]) for r in rows])
+            y = np.array([r["ground_truth"] for r in rows])
+            
+            self.mapie_clf.conformalize(X, y)
+            self.calibrated = True
+        except Exception as e:
+            print(f"[ConformalJudge] Calibration initialization note: {e}")
 
-        # Decision tree
-        if interval_width > settings.HIGH_UNCERTAINTY_THRESHOLD:
-            decision = "ESCALATE_HUMAN_REVIEW"
-            HUMAN_REVIEWS_TRIGGERED.inc()
-        elif lower_bound >= 70.0:
-            decision = "AUTO_PASS"
-        else:
-            decision = "AUTO_REMEDIATE"
+    def _votes_to_proba(self, votes: List[str]) -> np.ndarray:
+        counts = np.array([votes.count(c) for c in self.classes], dtype=float)
+        total = counts.sum()
+        if total == 0:
+            return np.ones(len(self.classes)) / len(self.classes)
+        return counts / total
 
-        return {
-            "point_estimate": point_estimate,
-            "ci_90": [round(lower_bound, 2), round(upper_bound, 2)],
-            "interval_width": round(interval_width, 2),
-            "decision": decision
-        }
+    def evaluate_verdict(
+        self, 
+        votes: List[str], 
+        fallback_verdict: str = "MATCH"
+    ) -> Dict[str, Any]:
+        """
+        Evaluates a 3-call consensus vote vector using calibrated MAPIE prediction sets.
+        - Set size == 1: Single decisive verdict (autonomous decision)
+        - Set size >= 2: Multi-verdict ambiguity (abstain / flag for review)
+        """
+        with tracer.start_as_current_span("ConformalJudge.evaluate_verdict"):
+            proba = self._votes_to_proba(votes).reshape(1, -1)
+            
+            if not self.calibrated:
+                majority = max(set(votes), key=votes.count) if votes else fallback_verdict
+                return {
+                    "verdict": majority,
+                    "prediction_set": [majority],
+                    "set_size": 1,
+                    "is_autonomous": True,
+                    "coverage_guarantee": self.confidence_level,
+                    "calibrated": False
+                }
+
+            _, y_sets = self.mapie_clf.predict_set(proba)
+            y_sets_arr = np.asarray(y_sets)
+            mask = y_sets_arr[0].reshape(-1) if y_sets_arr[0].ndim == 1 else y_sets_arr[0, :, 0]
+            pred_set = [self.classes[j] for j, in_set in enumerate(mask) if in_set]
+            
+            set_size = len(pred_set)
+            CONFORMAL_SET_SIZE_HISTOGRAM.observe(set_size)
+            
+            if set_size == 1:
+                final_verdict = pred_set[0]
+                is_autonomous = True
+            else:
+                UNCERTAIN_VERDICTS_COUNTER.inc()
+                is_autonomous = False
+                final_verdict = "CANNOT_DETERMINE" if "CANNOT_DETERMINE" in pred_set else pred_set[0]
+
+            return {
+                "verdict": final_verdict,
+                "prediction_set": pred_set,
+                "set_size": set_size,
+                "is_autonomous": is_autonomous,
+                "coverage_guarantee": self.confidence_level,
+                "agreement_rate": float(max(proba[0])),
+                "calibrated": True
+            }

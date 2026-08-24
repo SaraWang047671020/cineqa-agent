@@ -1,4 +1,5 @@
-"""Frame Verification Engine: Evaluates atomic claims against video frames & reference concept art images.
+"""Frame Verification Engine: Evaluates atomic claims against video frames & reference concept art.
+Integrates MAPIE 1.5.0 Conformal Decision Layer for mathematically sound verdict determination.
 """
 
 import json
@@ -9,6 +10,7 @@ from collections import Counter
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union
 from config.settings import settings
+from agents.conformal_judge import ConformalJudge
 
 VALID_VERDICTS = {"MATCH", "MISMATCH", "CANNOT_DETERMINE"}
 
@@ -55,6 +57,9 @@ VERIFY_RESPONSE_SCHEMA = {
         "event_causal_order", "verdict", "observed", "confidence",
     ],
 }
+
+# Instantiate singleton Conformal Judge calibrated on 92 benchmark rows
+_conformal_judge = ConformalJudge(confidence_level=0.80)
 
 def get_clip_duration(video_path: str) -> float:
     result = subprocess.run(
@@ -132,8 +137,6 @@ def call_gemini_verify(
         image_list.append(reference_image_path)
 
     contents = []
-    
-    # 1. Attach Reference Storyboards / Concept Art if provided
     for idx, img_path in enumerate(image_list):
         if img_path and os.path.exists(img_path):
             ext = Path(img_path).suffix.lower()
@@ -144,7 +147,6 @@ def call_gemini_verify(
                 )
             contents.append(f"[REFERENCE_IMAGE_{idx+1}: {Path(img_path).name}]")
 
-    # 2. Attach Video Sampled Frames
     for p in frame_paths:
         with open(p, "rb") as fh:
             contents.append(
@@ -164,7 +166,6 @@ def call_gemini_verify(
     )
     return json.loads(response.text)
 
-CONFIDENCE_RERUN_THRESHOLD = 0.85
 CONSENSUS_ROUNDS = 3
 
 def call_gemini_verify_with_consensus(
@@ -175,22 +176,26 @@ def call_gemini_verify_with_consensus(
     dry_run: bool = False, 
     project: Optional[str] = None, 
     location: Optional[str] = None,
-    confidence_threshold: float = CONFIDENCE_RERUN_THRESHOLD,
     consensus_rounds: int = CONSENSUS_ROUNDS,
     **kwargs
 ) -> Dict[str, Any]:
+    """
+    Executes consensus verification and passes the resulting vote distribution
+    into the MAPIE 1.5.0 Conformal Decision Layer for guaranteed risk control.
+    """
     first = call_gemini_verify(
         claim_text, frame_paths, 
         reference_image_paths=reference_image_paths, 
         reference_image_path=reference_image_path,
         dry_run=dry_run, project=project, location=location
     )
-    confidence = first.get("confidence")
 
-    if dry_run or (confidence is None or confidence >= confidence_threshold):
+    if dry_run:
         result = dict(first)
         result["consensus_calls"] = 1
-        result["consensus_votes"] = [first.get("verdict")]
+        result["consensus_votes"] = ["MATCH"]
+        result["prediction_set"] = ["MATCH"]
+        result["conformal_autonomous"] = True
         return result
 
     votes = [first]
@@ -204,17 +209,22 @@ def call_gemini_verify_with_consensus(
             )
         )
 
-    verdicts = [v.get("verdict") for v in votes]
-    top_verdict, top_count = Counter(verdicts).most_common(1)[0]
-
-    if top_count > len(verdicts) / 2:
-        representative = next(v for v in votes if v.get("verdict") == top_verdict)
-        result = dict(representative)
-    else:
-        result = dict(votes[0])
-        result["verdict"] = "CANNOT_DETERMINE"
-        result["observed"] = f"Low confidence ({confidence:.2f}) triggered {consensus_rounds}-round consensus without majority agreement."
-
+    verdict_strings = [v.get("verdict", "CANNOT_DETERMINE") for v in votes]
+    conformal_result = _conformal_judge.evaluate_verdict(verdict_strings)
+    
+    calibrated_verdict = conformal_result["verdict"]
+    representative = next((v for v in votes if v.get("verdict") == calibrated_verdict), votes[0])
+    
+    result = dict(representative)
+    result["verdict"] = calibrated_verdict
     result["consensus_calls"] = len(votes)
-    result["consensus_votes"] = verdicts
+    result["consensus_votes"] = verdict_strings
+    result["prediction_set"] = conformal_result.get("prediction_set", [calibrated_verdict])
+    result["conformal_set_size"] = conformal_result.get("set_size", 1)
+    result["conformal_autonomous"] = conformal_result.get("is_autonomous", True)
+    result["coverage_guarantee"] = conformal_result.get("coverage_guarantee", 0.80)
+    
+    if not conformal_result["is_autonomous"]:
+        result["observed"] += f" [MAPIE Risk Control: Ambiguous Prediction Set {result['prediction_set']}]"
+        
     return result

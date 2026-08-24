@@ -25,6 +25,18 @@ UNCERTAINTY_WIDTH = Gauge(
     ['shot_id']
 )
 
+# --- Conformal Prediction & Risk Control ---
+CONFORMAL_SET_SIZE_HISTOGRAM = Histogram(
+    'cine_conformal_prediction_set_size',
+    'Size of MAPIE Conformal Prediction Sets (1 = decisive, >1 = ambiguous)',
+    buckets=[1, 2, 3]
+)
+
+UNCERTAIN_VERDICTS_COUNTER = Counter(
+    'cine_uncertain_conformal_verdicts_total',
+    'Verdicts where MAPIE prediction set was multi-class requiring abstention or human review'
+)
+
 # --- Production & Operations Counters ---
 TAKES_TOTAL = Counter(
     'cine_takes_total', 
