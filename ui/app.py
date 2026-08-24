@@ -310,9 +310,13 @@ if "healed_video_path" in st.session_state and "original_video_path" in st.sessi
     with col_before:
         st.markdown("#### ❌ Take 1: Original Take (Failed Inspection)")
         orig_p = st.session_state["original_video_path"]
+        if not os.path.isabs(orig_p):
+            root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            orig_p = os.path.join(root_dir, orig_p)
+            
         if os.path.exists(orig_p):
             with open(orig_p, "rb") as vf:
-                st.video(vf.read())
+                st.video(vf.read(), format="video/mp4")
         else:
             st.warning(f"Original video not found on disk: {orig_p}")
             
@@ -327,9 +331,13 @@ if "healed_video_path" in st.session_state and "original_video_path" in st.sessi
     with col_after:
         st.markdown("#### ✅ Take 2: Google VEO 2 Auto-Healed Take (Passed)")
         heal_p = st.session_state["healed_video_path"]
+        if not os.path.isabs(heal_p):
+            root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            heal_p = os.path.join(root_dir, heal_p)
+            
         if os.path.exists(heal_p) and os.path.getsize(heal_p) > 100:
             with open(heal_p, "rb") as vf:
-                st.video(vf.read())
+                st.video(vf.read(), format="video/mp4")
         else:
             st.warning(f"Healed video take is being generated or ready at: {heal_p}")
             
