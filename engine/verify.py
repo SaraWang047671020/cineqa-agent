@@ -62,6 +62,14 @@ VERIFY_RESPONSE_SCHEMA = {
             "type": "string",
             "description": "Objective observations across frames with viewer-perspective coordinate tracking and topological continuity analysis",
         },
+        "kinetic_displacement_analysis": {
+            "type": "string",
+            "description": "If an action is claimed, describe EXACTLY the frame-by-frame physical displacement and contact. If NO displacement/contact is visible, you MUST explicitly state 'NO KINETIC MOVEMENT OBSERVED'."
+        },
+        "falsification_check": {
+            "type": "string",
+            "description": "Play devil's advocate. Assume the action DID NOT happen. Is there definitive visual proof that refutes this assumption? If no, it MUST be a MISMATCH."
+        },
         "all_required_subjects_fully_visible": {"type": "boolean"},
         "artifacts_affect_judgment": {
             "type": "boolean",
