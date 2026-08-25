@@ -62,13 +62,13 @@ VERIFY_RESPONSE_SCHEMA = {
             "type": "string",
             "description": "Objective observations across frames with viewer-perspective coordinate tracking and topological continuity analysis",
         },
-        "kinetic_displacement_analysis": {
+        "kinetic_motion_and_context": {
             "type": "string",
-            "description": "If an action is claimed, describe EXACTLY the frame-by-frame physical displacement and contact. If NO displacement/contact is visible, you MUST explicitly state 'NO KINETIC MOVEMENT OBSERVED'."
+            "description": "Evaluate the action based on visible motion, contact, OR strong contextual cues (e.g., motion blur, physical aftermath, flying debris). Acknowledge that generative videos may not have perfect frame-by-frame physics."
         },
-        "falsification_check": {
+        "evidence_sufficiency_check": {
             "type": "string",
-            "description": "Play devil's advocate. Assume the action DID NOT happen. Is there definitive visual proof that refutes this assumption? If no, it MUST be a MISMATCH."
+            "description": "Balance your judgment. Do not demand irrefutable proof. If the action is reasonably depicted, visually implied, or present without glaring contradictions, lean towards acceptance. Only mark MISMATCH if the action is entirely missing, completely stationary, or egregiously contradicts the claim."
         },
         "all_required_subjects_fully_visible": {"type": "boolean"},
         "artifacts_affect_judgment": {
