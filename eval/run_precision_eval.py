@@ -111,7 +111,12 @@ def main():
             continue
 
         verdict_data = call_gemini_verify_with_consensus(
-            row["claim_text"], frames, args.dry_run, force_consensus=args.force_consensus
+            claim_text=row["claim_text"],
+            frame_paths=frames,
+            dry_run=args.dry_run,
+            consensus_rounds=3 if args.force_consensus else 1,
+            claim_type=row.get("type", "state"),
+            temporal=row.get("temporal", "static")
         )
         system_verdict = verdict_data.get("verdict", "CANNOT_DETERMINE")
 

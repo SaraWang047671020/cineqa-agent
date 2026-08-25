@@ -38,6 +38,7 @@ def stream_pipeline(
             "claim_id": claim_id,
             "claim_text": claim["claim_text"],
             "type": claim["type"],
+            "tier": claim.get("tier", ""),
             "verifiable": claim["verifiable"],
             "temporal": claim["temporal"],
             "entities": claim.get("entities", []),
@@ -65,7 +66,9 @@ def stream_pipeline(
             reference_image_path=reference_image_path,
             dry_run=dry_run,
             project=project, 
-            location=location
+            location=location,
+            claim_type=claim["type"],
+            temporal=claim["temporal"]
         )
         entry["verdict"] = verdict_data.get("verdict", "CANNOT_DETERMINE")
         entry["observed"] = verdict_data.get("observed", "")

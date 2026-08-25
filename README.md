@@ -20,7 +20,7 @@
                                              │
                        ┌─────────────────────▼─────────────────────┐
                        │    2. Adaptive Frame Sampling Pipeline    │
-                       │    (Static: 3 Keyframes | Sequential: 0.4s│
+                       │    (Static: 5 Keyframes | Sequential: 0.2s Uniform│
                        └─────────────────────┬─────────────────────┘
                                              │
                        ┌─────────────────────▼─────────────────────┐

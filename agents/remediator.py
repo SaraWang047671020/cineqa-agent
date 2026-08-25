@@ -25,16 +25,16 @@ Follow these strict scientific guidelines:
 3. **SSPO (Stage-Specific Prompt Optimization) Routing Table**:
    You MUST classify each failed claim by its `type` in the ledger and apply the EXACT corresponding Prompt Modification Strategy below (Operationalizing RAPO++):
    
-   - IF type == "action" OR "physics":
+   - IF type == "action":
      [Strategy: Micro-Geometrical Transformation & Shot Sequencing] Video models lack the conceptual "world model" of complex physical destruction. You MUST explicitly dictate the exact geometrical changes and assign them to specific seconds/shots. Use VFX terminology ("breakaway prop"). Format strictly as: "00:00-00:01 (Shot 1: The Setup): [Describe solid geometry and position]. 00:01-00:02 (Shot 2: The Fracture): [Describe the exact geometrical breaking, e.g., the solid rectangle violently splits into jagged flying polygons and splinters]. 00:02-00:04 (Shot 3: The Aftermath): [Describe final resting position, e.g., the largest jagged chunk flies backward and rests flat against the background wall]."
      
-   - IF type == "spatial_geometry" OR "spatial":
+   - IF type in ("relative_position", "direction", "relative_size"):
      [Strategy: Absolute Coordinate Anchoring] Video models struggle with relative spatial relations. You MUST use strict viewer-centric coordinates ("viewer-left", "foreground-right", "background-center"). Remove ambiguous prepositions. Add incorrect positions to the Negative Prompt.
      
-   - IF type == "multimodal_consistency" OR "attribute" OR "state":
+   - IF type in ("color", "state", "count"):
      [Strategy: Explicit Attribute Binding] To prevent attribute leakage (color/texture bleeding), you MUST place adjectives immediately adjacent to their nouns. Simplify sentence structure. Explicitly suppress incorrect traits in the Negative Prompt (e.g., if a sword should be blue, add "red sword, green sword" to negative).
      
-   - IF type == "tier1_causal_action" OR "temporal":
+   - IF tier == "tier1_causal_action" OR temporal == "sequential":
      [Strategy: Chronological State Forcing] Enforce rigid temporal flow using explicit state transitions: "00:00 (Initial): [State A]. 00:01 (Action): [State B]. 00:03 (Final Result): [State C with explicit positions]." Suppress "reversed causal direction" or "simultaneous actions" in the Negative Prompt.
 
 4. **Targeted Token Surgery**:
@@ -66,10 +66,57 @@ Output valid JSON matching this schema:
         "action_note": "string"
     },
     "suggested_inpaint_range": "string",
-    "estimated_dollars_saved": float,
     "remediation_summary": "string"
 }
 """
+
+REMEDIATION_RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "structured_prompt_breakdown": {
+            "type": "object",
+            "properties": {
+                "camera_and_optics": {"type": "string"},
+                "subject_and_attributes": {"type": "string"},
+                "action_and_trajectory": {"type": "string"},
+                "spatial_and_numeracy": {"type": "string"},
+                "lighting_and_physics": {"type": "string"},
+            },
+            "required": ["camera_and_optics", "subject_and_attributes",
+                         "action_and_trajectory", "spatial_and_numeracy",
+                         "lighting_and_physics"],
+        },
+        "refined_positive_prompt": {"type": "string"},
+        "negative_prompt": {"type": "string"},
+        "targeted_token_surgery": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "original_phrase": {"type": "string"},
+                    "repaired_phrase": {"type": "string"},
+                    "failure_claim_type": {"type": "string"},
+                    "rationale": {"type": "string"},
+                },
+                "required": ["original_phrase", "repaired_phrase",
+                             "failure_claim_type", "rationale"],
+            },
+        },
+        "parameter_tuning": {
+            "type": "object",
+            "properties": {
+                "cfg_scale": {"type": "number"},
+                "motion_bucket_id": {"type": "integer"},
+                "inpaint_denoising_strength": {"type": "number"},
+                "action_note": {"type": "string"},
+            },
+        },
+        "suggested_inpaint_range": {"type": "string"},
+        "remediation_summary": {"type": "string"},
+    },
+    "required": ["refined_positive_prompt", "negative_prompt",
+                 "targeted_token_surgery", "remediation_summary"],
+}
 
 class PromptRemediatorAgent:
     """
@@ -92,6 +139,7 @@ class PromptRemediatorAgent:
                 contents=[user_content, REMEDIATION_PROMPT_TEMPLATE],
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
+                    response_schema=REMEDIATION_RESPONSE_SCHEMA,
                     temperature=0.2
                 )
             )
@@ -100,8 +148,16 @@ class PromptRemediatorAgent:
             elapsed = time.time() - start_time
             REMEDIATION_DURATION_SECONDS.observe(elapsed)
 
-            # Record estimated savings in Prometheus
-            saved = float(result.get("estimated_dollars_saved", 0.35))
+                        # Deterministic savings: each failed claim caught pre-regeneration
+            # avoids one blind Veo retake at known cost
+            VEO_COST_PER_TAKE = 0.40  # USD, Veo 3.1 Fast 4s take; adjust to actual pricing
+            ledger = inspection_result.get("ledger", inspection_result if isinstance(inspection_result, list) else [])
+            failed_count = sum(
+                1 for c in ledger
+                if isinstance(c, dict) and c.get("verdict") in ("MISMATCH", "CANNOT_DETERMINE")
+            )
+            saved = VEO_COST_PER_TAKE * max(1, failed_count)
+            result["estimated_dollars_saved"] = saved
             DOLLARS_SAVED_ESTIMATE.inc(saved)
 
             return result
