@@ -37,7 +37,7 @@ def votes_to_proba(votes):
         return np.ones(len(CLASSES)) / len(CLASSES)
     return counts / total
 
-def run_calibration(data_path="eval/labeled_set/calibration_data_full.json", confidence_level=0.90):
+def run_calibration(data_path="eval/labeled_set/calibration_data_full.json", confidence_level=0.75):
     print("=" * 70)
     print(f"🎯 Calibrating MAPIE 1.5.0 Conformal Classifier (Confidence: {confidence_level:.0%})")
     print("=" * 70)

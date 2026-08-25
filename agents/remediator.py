@@ -37,6 +37,9 @@ Follow these strict scientific guidelines:
    - IF tier == "tier1_causal_action" OR temporal == "sequential":
      [Strategy: Chronological State Forcing] Enforce rigid temporal flow using explicit state transitions: "00:00 (Initial): [State A]. 00:01 (Action): [State B]. 00:03 (Final Result): [State C with explicit positions]." Suppress "reversed causal direction" or "simultaneous actions" in the Negative Prompt.
 
+5. **CRITICAL PRESERVATION RULE (ANTI-HALLUCINATION)**:
+   DO NOT alter any geometries, directions, or entities that are not explicitly marked as MISMATCH in the ledger. If the original prompt specifies 'running downward', 'left to right', etc., you MUST preserve these exact spatial and directional intents. Never flip directions (e.g., down to up, left to right) unless explicitly told the original was wrong.
+
 4. **Targeted Token Surgery**:
    Identify the exact failing token spans based on the above mapping. When populating the `rationale` in the `targeted_token_surgery` output, explicitly state which [Strategy] you applied.
 

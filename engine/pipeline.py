@@ -52,7 +52,8 @@ def stream_pipeline(
             continue
 
         frame_out_dir = Path(frames_dir) / claim_id
-        frames = extract_frames(video_path, str(frame_out_dir), claim["temporal"], claim_id)
+        sampling = claim.get("sampling_strategy", "uniform")
+        frames = extract_frames(video_path, str(frame_out_dir), claim["temporal"], claim_id, sampling_strategy=sampling)
         if not frames:
             entry["verdict"] = "CANNOT_DETERMINE"
             entry["observed"] = "Failed to sample frames from video take."

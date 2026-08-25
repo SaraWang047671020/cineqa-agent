@@ -9,13 +9,13 @@ import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Tuple
 from config.settings import settings
 from agents.conformal_judge import ConformalJudge
 
 VALID_VERDICTS = {"MATCH", "MISMATCH", "CANNOT_DETERMINE"}
 
-PROMPT_BASE = """Claim to verify: "{claim_text}"\n\nThe video frames are attached in chronological order, each preceded by a label [FRAME_i @ t=X.XXs] giving its exact timestamp in the take. Use these timestamps to reason about sampling gaps, motion speed, and temporal continuity. (If reference storyboard/character concept art images are provided, they are labeled as REFERENCE_IMAGE_X).\n\nYou MUST execute the following 5-Step Mandatory Verification Protocol in exact sequential order before determining your final verdict:\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nSTEP 1: SUB-FACT DECOMPOSITION & PHYSICAL/CINEMATIC DYNAMICS PRE-REGISTRATION\n• Break down the claim into atomic sub-facts that must each individually hold true.\n• Wearing/Holding relations: Check for physical contact/attachment. Verify there is no mesh clipping (e.g. blade clipping through palm instead of being gripped).\nSTEP 2: OBJECTIVE OBSERVATION & COORDINATE ANCHORING (NO PREMATURE CONCLUSIONS)\n• Screen-Space Orientation: Left and Right are ALWAYS defined strictly from the VIEWER'S PERSPECTIVE looking at the screen (Viewer Left / Viewer Right), NEVER the subject's anatomical perspective.\n• Horizontal Movement Anchoring: For motion claims, explicitly record the subject's horizontal position in the first frame vs final frame (e.g. Left Edge X:15% -> Right Edge X:85%).\n• Camera Motion Disentanglement: Distinguish between camera panning/tracking vs subject locomotion in the scene.\n\nSTEP 3: EVIDENCE SUFFICIENCY, INEQUALITY BOUNDING & INCIDENTAL ACTORS\n• Partial Visibility: A full 100% silhouette outline is not required if the specific relation/attribute is unmistakable.\n• Incidental Actor Tolerance: If the target entity and its verified action hold true in the primary action window, late-frame peripheral appearances (e.g. incidental hand entering frame, background ambient motion) do NOT invalidate the claim unless the claim explicitly specified 'in complete isolation' or 'no hands'.\n• Lower-Bound Claims ('at least N times bigger/taller'): If the cropped/partially visible entity is the one required to be larger and its visible portion already exceeds the threshold, unobserved portions only increase the true size -> counts as SUFFICIENT evidence.\n• Depth Perspective Check: Ensure entities being compared reside on the same focal/depth plane to rule out foreshortening/perspective distortions.\n\nSTEP 4: LOCALIZED AI ARTIFACT DISCRIMINATION\n• Set `artifacts_affect_judgment=true` ONLY if AI generation defects (morphing, limb fusion, blur) occur directly in the spatial-temporal ROI needed to verify this claim.\n• If the core sub-fact is clearly verifiable in clean frames/regions, unrelated background artifacts do NOT invalidate the judgment.\n\nSTEP 5: VERDICT FORMULATION & REVERSE-DIFFUSION CAUSAL CHECK\n• Output MATCH if and only if ALL sub-facts hold true with verified physical motion, topological continuity, and forward causality.\n• Output MISMATCH if any sub-fact is contradicted (e.g. hard scene cut, static blood texture instead of active flowing liquid), OR if a causal event displays reverse motion/un-breaking (e.g. debris assembling back into an intact object instead of shattering).\n• Output CANNOT_DETERMINE only if evidence is genuinely insufficient or localized artifacts obstruct evaluation. Do not abuse abstention out of generic caution.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+PROMPT_BASE = """Claim to verify: "{claim_text}"\n\nThe video frames are attached in chronological order, each preceded by a label [FRAME_i @ t=X.XXs] giving its exact timestamp in the take. Use these timestamps to reason about sampling gaps, motion speed, and temporal continuity. (If reference storyboard/character concept art images are provided, they are labeled as REFERENCE_IMAGE_X).\n\nYou MUST execute the following 5-Step Mandatory Verification Protocol in exact sequential order before determining your final verdict:\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nSTEP 1: SUB-FACT DECOMPOSITION & PHYSICAL/CINEMATIC DYNAMICS PRE-REGISTRATION\n• Break down the claim into atomic sub-facts that must each individually hold true.\n• Wearing/Holding relations: Check for physical contact/attachment. Verify there is no mesh clipping (e.g. blade clipping through palm instead of being gripped).\nSTEP 2: OBJECTIVE OBSERVATION & COORDINATE ANCHORING (NO PREMATURE CONCLUSIONS)\n• Screen-Space Orientation: Left and Right are ALWAYS defined strictly from the VIEWER'S PERSPECTIVE looking at the screen (Viewer Left / Viewer Right), NEVER the subject's anatomical perspective.\n• Horizontal Movement Anchoring: For motion claims, explicitly record the subject's horizontal position in the first frame vs final frame (e.g. Left Edge X:15% -> Right Edge X:85%).\n• Camera Tracking & Background Reference (CRITICAL): If a subject remains centrally framed across multiple frames (their screen X/Y coordinates do not change), you MUST observe the BACKGROUND (e.g., ground, buildings, bridge). If the background is shifting or scrolling continuously in the opposite direction, the camera is tracking the subject. This PROVES the subject is moving through the world. DO NOT falsely conclude the subject is "not moving" just because they stay in the center of the screen during a tracking shot!\n\nSTEP 3: EVIDENCE SUFFICIENCY, INEQUALITY BOUNDING & INCIDENTAL ACTORS\n• Partial Visibility: A full 100% silhouette outline is not required if the specific relation/attribute is unmistakable.\n• Incidental Actor Tolerance: If the target entity and its verified action hold true in the primary action window, late-frame peripheral appearances (e.g. incidental hand entering frame, background ambient motion) do NOT invalidate the claim unless the claim explicitly specified 'in complete isolation' or 'no hands'.\n• Lower-Bound Claims ('at least N times bigger/taller'): If the cropped/partially visible entity is the one required to be larger and its visible portion already exceeds the threshold, unobserved portions only increase the true size -> counts as SUFFICIENT evidence.\n• Depth Perspective Check: Ensure entities being compared reside on the same focal/depth plane to rule out foreshortening/perspective distortions.\n\nSTEP 4: LOCALIZED AI ARTIFACT DISCRIMINATION\n• Set `artifacts_affect_judgment=true` ONLY if AI generation defects (morphing, limb fusion, blur) occur directly in the spatial-temporal ROI needed to verify this claim.\n• If the core sub-fact is clearly verifiable in clean frames/regions, unrelated background artifacts do NOT invalidate the judgment.\n\nSTEP 5: VERDICT FORMULATION & REVERSE-DIFFUSION CAUSAL CHECK\n• Output MATCH if and only if ALL sub-facts hold true with verified physical motion, topological continuity, and forward causality.\n• Output MISMATCH if any sub-fact is contradicted (e.g. hard scene cut, static blood texture instead of active flowing liquid), OR if a causal event displays reverse motion/un-breaking (e.g. debris assembling back into an intact object instead of shattering).\n• Output CANNOT_DETERMINE only if evidence is genuinely insufficient or localized artifacts obstruct evaluation. Do not abuse abstention out of generic caution.\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
 
 BLOCK_ACTION = """• Implicit Entity Deduction (CRITICAL): You MUST infer unstated physical subjects logically required by the verbs. For example, if the text says 'is kicked', a 'foot/leg' MUST be visibly present to perform the action. If 'is slashed', a 'blade' MUST be present. An object cannot act upon itself. If the implicit agent is never visible AND there is no physical aftermath evidence (motion blur, sudden displacement, impact deformation, flying debris), output CANNOT_DETERMINE for this sub-fact rather than MISMATCH; the action may have occurred off-frame or between sampled frames.\n• Specific Action/Motion Verification (CRITICAL): If the claim describes an action (e.g., 'kicked away', 'drawing sword', 'dashing'), you MUST explicitly confirm that the kinetic movement, contact, and displacement corresponding to that exact action happens. If across ALL sampled frames the subjects only stand still, pose, or coexist with zero positional change and zero aftermath evidence, mark as MISMATCH. If frames show partial evidence of the motion (mid-action pose change, displacement between consecutive frames), treat it as evidence FOR the action."""
 
@@ -106,24 +106,40 @@ def get_clip_duration(video_path: str) -> float:
         return 4.0
     return float(result.stdout.strip())
 
-def extract_frames(video_path: str, out_dir: str, temporal: str, claim_id: str) -> List[tuple]:
-    video_path = Path(video_path)
-    out_dir = Path(out_dir)
+def extract_frames(video_path: str, out_dir_str: str, temporal: str, claim_id: str, sampling_strategy: str = "uniform") -> List[Tuple[str, float]]:
+    """Extracts frames from video based on temporal requirement and semantic sampling strategy."""
+    video = Path(video_path)
+    out_dir = Path(out_dir_str)
     out_dir.mkdir(parents=True, exist_ok=True)
-    duration = get_clip_duration(str(video_path))
+    
+    # Fast check duration using ffprobe
+    duration = 4.0
+    try:
+        res = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(video)],
+            capture_output=True, text=True
+        )
+        if res.stdout.strip():
+            duration = float(res.stdout.strip())
+    except Exception:
+        pass
 
     if temporal == "static":
-        timestamps = [
-            duration * 0.08, 
-            duration * 0.28, 
-            duration * 0.50, 
-            duration * 0.72, 
-            duration * 0.92
-        ]
+        n = 3
+        timestamps = [duration * 0.1, duration * 0.5, duration * 0.9]
     else:
-        n = max(2, min(20, int(duration / 0.20)))
-        start, end = duration * 0.02, max(duration - 0.05, duration * 0.02)
-        timestamps = [start + (end - start) * i / (n - 1) for i in range(n)]
+        if sampling_strategy == "fast_burst":
+            # High density sampling: focus on the first 1.5 seconds for instant/fast actions
+            burst_duration = min(duration, 1.5)
+            n = min(20, max(5, int(burst_duration * 12))) # Approx 12 fps burst
+            start = duration * 0.02
+            end = max(burst_duration, duration * 0.02)
+            timestamps = [start + (end - start) * i / max(1, n - 1) for i in range(n)]
+        else:
+            # Uniform sequential sampling across the whole video
+            n = max(2, min(20, int(duration / 0.20)))
+            start, end = duration * 0.02, max(duration - 0.05, duration * 0.02)
+            timestamps = [start + (end - start) * i / max(1, n - 1) for i in range(n)]
 
     frame_paths = []
     for i, ts in enumerate(timestamps):
@@ -134,7 +150,7 @@ def extract_frames(video_path: str, out_dir: str, temporal: str, claim_id: str) 
             capture_output=True,
         )
         if out_path.exists():
-            frame_paths.append((out_path, ts))
+            frame_paths.append((str(out_path), ts))
     return frame_paths
 
 def call_gemini_verify(

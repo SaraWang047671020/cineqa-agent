@@ -105,15 +105,34 @@ with col1:
             "tier4_physics_defect_control": ("🛡️ Tier 4: Physics & Defect Control", "#43A047")
         }
         
-        st.write(f"📋 **Extracted 4-Tier Critical Path ({len(claims)} Salient Claims)**:")
+        st.write(f"📝 **Extracted 4-Tier Critical Path ({len(claims)} Salient Claims)**:")
         for i, c in enumerate(claims):
             tier_name, tier_color = tier_map.get(c.get("tier", "tier1_causal_action"), ("📌 Critical Claim", "#666"))
             source_badge = f"[{c.get('reference_source', 'text_prompt').upper()}]"
             
             with st.expander(f"#{i+1} [{tier_name}] {source_badge} - {c['claim_text']}", expanded=False):
                 st.markdown(f"**Importance Rationale**: *{c.get('importance_rationale', 'Critical shot constraint')}*")
-                st.write(f"• **Attribute Type**: `{c['type'].upper()}` | **Temporal**: `{c['temporal']}` | **Verifiable**: `{c['verifiable']}`")
-                st.write(f"• **Entities Involved**: {', '.join(c.get('entities', []))}")
+                st.write(f"🏷️ **Attribute Type**: `{c['type'].upper()}` | **Temporal**: `{c['temporal']}` | **Verifiable**: `{c['verifiable']}`")
+                st.write(f"🧬 **Entities Involved**: {', '.join(c.get('entities', []))}")
+
+    st.divider()
+    st.subheader("Step 1.5: Generate Initial Take (Google VEO 2)")
+    st.info("🎬 Automatically generate Take 1 from the prompt above using Google Cloud Vertex AI.")
+    
+    if st.button("🎥 Generate Initial Video (Take 1)", type="primary", use_container_width=True):
+        with st.spinner("⏳ Generating Take 1 with Google VEO 2... (Please wait ~1-2 mins)"):
+            try:
+                ref_img = st.session_state.get("ref_image_paths", [None])[0] if st.session_state.get("ref_image_paths") else None
+                gen_res = generate_video(
+                    prompt=scene_text,
+                    reference_image_path=ref_img,
+                    use_live_veo=live_veo_toggle
+                )
+                st.session_state["original_video_path"] = gen_res["video_path"]
+                st.success(f"✅ Take 1 Generated Successfully! Saved to {gen_res['video_path']}")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Initial Video Generation failed: {e}")
 
 with col2:
     st.subheader("2. Video Take Ingestion & Frame-by-Frame Verification")
@@ -211,14 +230,14 @@ if "verification_ledger" in st.session_state:
         st.divider()
         st.subheader("4. Targeted Prompt Surgery & Autonomous VEO 2 Self-Healing Loop")
         
-        if "rem_plan" not in st.session_state:
-            if st.button("🛠️ Step 3: Synthesize 5-Part Disentangled Prompt & Negative Constraints", use_container_width=True):
-                remediator = PromptRemediatorAgent()
-                with st.spinner("Synthesizing 5-part prompt structure and counterfactual negative prompt..."):
-                    rem_plan = remediator.remediate(scene_text, {"ledger": ledger, "pass_rate": pass_rate})
-                    st.session_state["rem_plan"] = rem_plan
-                    st.success("Remediation strategy synthesized!")
-                    st.rerun()
+        btn_text = "🔄 Re-Synthesize Prompt & Constraints" if "rem_plan" in st.session_state else "🧠 Step 3: Synthesize 5-Part Disentangled Prompt & Negative Constraints"
+        if st.button(btn_text, use_container_width=True):
+            remediator = PromptRemediatorAgent()
+            with st.spinner("Synthesizing 5-part prompt structure and counterfactual negative prompt..."):
+                rem_plan = remediator.remediate(scene_text, {"ledger": ledger, "pass_rate": pass_rate})
+                st.session_state["rem_plan"] = rem_plan
+                st.success("Remediation strategy synthesized!")
+                st.rerun()
                     
         if "rem_plan" in st.session_state:
             plan = st.session_state["rem_plan"]

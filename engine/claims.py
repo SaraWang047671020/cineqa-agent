@@ -34,6 +34,11 @@ CLAIM_SCHEMA = {
                     },
                     "verifiable": {"type": "boolean"},
                     "temporal": {"type": "string", "enum": ["static", "sequential"]},
+                    "sampling_strategy": {
+                        "type": "string", 
+                        "enum": ["uniform", "fast_burst"],
+                        "description": "Use 'fast_burst' if prompt implies high-speed/instant action, else 'uniform'."
+                    },
                     "entities": {"type": "array", "items": {"type": "string"}},
                     "reference_source": {
                         "type": "string", 
@@ -44,7 +49,7 @@ CLAIM_SCHEMA = {
                         "description": "Why this specific claim is critical to shot success."
                     }
                 },
-                "required": ["claim_text", "tier", "type", "verifiable", "temporal", "entities", "importance_rationale"],
+                "required": ["claim_text", "tier", "type", "verifiable", "temporal", "sampling_strategy", "entities", "importance_rationale"],
             },
         }
     },
@@ -61,7 +66,9 @@ Your task: Distill the director's prompt (which may contain hundreds of words of
    - DO NOT extract camera lens model names unless it describes an observable physical shot framing.
 3. **CONSOLIDATE FRAGMENTED ATTRIBUTES**:
    - Merge scattered attributes into single coherent entity claims (e.g., "The projectile is a thin cream-grey bone shard dart with a sharp needle point" instead of 4 separate fragments).
-4. **4-TIER CRITICAL PATH HIERARCHY**:
+4. **SEMANTIC SAMPLING STRATEGY**:
+   - Set `sampling_strategy` to `fast_burst` ONLY IF the action is described with words like "instant", "high-speed", "fraction of a second", or "immediately". Otherwise, use `uniform`.
+5. **4-TIER CRITICAL PATH HIERARCHY**:
    - **`tier1_causal_action`**: Core chronological forward timeline (projectile entrance/exit, trigger event, instant physical reaction, wound opening, character clenching).
    - **`tier2_spatial_geometry`**: Strict spatial alignments and framing bounds (e.g., cut passes directly through navel center, face out of frame, left/right bokeh framing).
    - **`tier3_multimodal_consistency`**: Visual asset alignment with attached concept art / storyboard references (if provided).
