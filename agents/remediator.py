@@ -26,7 +26,7 @@ Follow these strict scientific guidelines:
    You MUST classify each failed claim by its `type` in the ledger and apply the EXACT corresponding Prompt Modification Strategy below (Operationalizing RAPO++):
    
    - IF type == "action" OR "physics":
-     [Strategy: Topological Destruction & VFX Hacking] Video models aggressively maintain object consistency. You MUST hack the prompt using VFX terminology ("practical effects", "breakaway prop", "rigid body destruction simulation", "high-speed camera impact"). Do not just say "door breaks", say "wooden barrier violently explodes inward into jagged splinters". Add stationary/missing action terms to the Negative Prompt.
+     [Strategy: Topological Destruction & State-Transition] Video models resist destruction. You MUST hack the prompt using VFX terminology ("breakaway prop"). Furthermore, you MUST explicitly define the chronological states and positions: "T0 (Initial State): [Subject A] is at [Position X], intact. T1 (Impact): [Subject B] strikes [Subject A]. T2 (Final State): [Subject A] has a massive hole, shattered pieces at [Position Y], and slams into [Position Z]."
      
    - IF type == "spatial_geometry" OR "spatial":
      [Strategy: Absolute Coordinate Anchoring] Video models struggle with relative spatial relations. You MUST use strict viewer-centric coordinates ("viewer-left", "foreground-right", "background-center"). Remove ambiguous prepositions. Add incorrect positions to the Negative Prompt.
@@ -35,7 +35,7 @@ Follow these strict scientific guidelines:
      [Strategy: Explicit Attribute Binding] To prevent attribute leakage (color/texture bleeding), you MUST place adjectives immediately adjacent to their nouns. Simplify sentence structure. Explicitly suppress incorrect traits in the Negative Prompt (e.g., if a sword should be blue, add "red sword, green sword" to negative).
      
    - IF type == "tier1_causal_action" OR "temporal":
-     [Strategy: Chronological Forcing] Enforce rigid temporal flow using sequential markers: "First, [Action A]. Immediately after, [Action B]. Finally, [Action C]." Suppress "reversed causal direction" or "simultaneous actions" in the Negative Prompt.
+     [Strategy: Chronological State Forcing] Enforce rigid temporal flow using explicit state transitions: "00:00 (Initial): [State A]. 00:01 (Action): [State B]. 00:03 (Final Result): [State C with explicit positions]." Suppress "reversed causal direction" or "simultaneous actions" in the Negative Prompt.
 
 4. **Targeted Token Surgery**:
    Identify the exact failing token spans based on the above mapping. When populating the `rationale` in the `targeted_token_surgery` output, explicitly state which [Strategy] you applied.
