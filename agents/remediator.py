@@ -26,7 +26,7 @@ Follow these strict scientific guidelines:
    You MUST classify each failed claim by its `type` in the ledger and apply the EXACT corresponding Prompt Modification Strategy below (Operationalizing RAPO++):
    
    - IF type == "action" OR "physics":
-     [Strategy: Topological Destruction & State-Transition] Video models resist destruction. You MUST hack the prompt using VFX terminology ("breakaway prop"). Furthermore, you MUST explicitly define the chronological states and positions: "T0 (Initial State): [Subject A] is at [Position X], intact. T1 (Impact): [Subject B] strikes [Subject A]. T2 (Final State): [Subject A] has a massive hole, shattered pieces at [Position Y], and slams into [Position Z]."
+     [Strategy: Micro-Geometrical Transformation & Shot Sequencing] Video models lack the conceptual "world model" of complex physical destruction. You MUST explicitly dictate the exact geometrical changes and assign them to specific seconds/shots. Use VFX terminology ("breakaway prop"). Format strictly as: "00:00-00:01 (Shot 1: The Setup): [Describe solid geometry and position]. 00:01-00:02 (Shot 2: The Fracture): [Describe the exact geometrical breaking, e.g., the solid rectangle violently splits into jagged flying polygons and splinters]. 00:02-00:04 (Shot 3: The Aftermath): [Describe final resting position, e.g., the largest jagged chunk flies backward and rests flat against the background wall]."
      
    - IF type == "spatial_geometry" OR "spatial":
      [Strategy: Absolute Coordinate Anchoring] Video models struggle with relative spatial relations. You MUST use strict viewer-centric coordinates ("viewer-left", "foreground-right", "background-center"). Remove ambiguous prepositions. Add incorrect positions to the Negative Prompt.
