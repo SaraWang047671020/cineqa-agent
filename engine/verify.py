@@ -58,6 +58,14 @@ VERIFY_RESPONSE_SCHEMA = {
             "items": {"type": "string"},
             "description": "The specific atomic sub-facts that must each individually hold true",
         },
+        "entity_presence_check": {
+            "type": "string",
+            "description": "Step 1 (Objects): Identify all nouns/entities (e.g., door, foot, hole, splinters). Confirm exactly which of these are visibly present in the frames."
+        },
+        "action_execution_check": {
+            "type": "string",
+            "description": "Step 2 (Verbs): Identify all actions (e.g., kicked, broken, swinging). For the entities found in Step 1, verify if these specific actions actually occurred between them."
+        },
         "frame_observations": {
             "type": "string",
             "description": "Objective observations across frames with viewer-perspective coordinate tracking and topological continuity analysis",
@@ -91,7 +99,8 @@ VERIFY_RESPONSE_SCHEMA = {
         },
     },
     "required": [
-        "checkable_components", "frame_observations",
+        "checkable_components", "entity_presence_check", "action_execution_check",
+        "frame_observations", "kinetic_motion_and_context", "evidence_sufficiency_check",
         "all_required_subjects_fully_visible", "artifacts_affect_judgment",
         "event_causal_order", "verdict", "observed", "confidence",
     ],
