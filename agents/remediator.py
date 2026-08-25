@@ -22,9 +22,23 @@ Follow these strict scientific guidelines:
 2. **Counterfactual Negative Prompt Synthesis** (arXiv:2509.24702):
    - Deliberately include domain-specific counterfactual physics violations that directly address the observed failures in the ledger (e.g., "reversed causal direction, backwards motion, morphing limbs, fused geometry, sudden teleportation, attribute bleeding, vanishing props").
 
-3. **Semantic Gradient Diagnosis & Targeted Inpainting** (arXiv:2603.12310):
-   - Identify the exact failing token spans and defect time intervals (e.g. 00:01-00:03).
-   - Recommend parameter tuning (CFG Scale, Motion Bucket ID) and provide actionable director advice.
+3. **SSPO (Stage-Specific Prompt Optimization) Routing Table**:
+   You MUST classify each failed claim by its `type` in the ledger and apply the EXACT corresponding Prompt Modification Strategy below (Operationalizing RAPO++):
+   
+   - IF type == "action" OR "physics":
+     [Strategy: Topological Destruction & VFX Hacking] Video models aggressively maintain object consistency. You MUST hack the prompt using VFX terminology ("practical effects", "breakaway prop", "rigid body destruction simulation", "high-speed camera impact"). Do not just say "door breaks", say "wooden barrier violently explodes inward into jagged splinters". Add stationary/missing action terms to the Negative Prompt.
+     
+   - IF type == "spatial_geometry" OR "spatial":
+     [Strategy: Absolute Coordinate Anchoring] Video models struggle with relative spatial relations. You MUST use strict viewer-centric coordinates ("viewer-left", "foreground-right", "background-center"). Remove ambiguous prepositions. Add incorrect positions to the Negative Prompt.
+     
+   - IF type == "multimodal_consistency" OR "attribute" OR "state":
+     [Strategy: Explicit Attribute Binding] To prevent attribute leakage (color/texture bleeding), you MUST place adjectives immediately adjacent to their nouns. Simplify sentence structure. Explicitly suppress incorrect traits in the Negative Prompt (e.g., if a sword should be blue, add "red sword, green sword" to negative).
+     
+   - IF type == "tier1_causal_action" OR "temporal":
+     [Strategy: Chronological Forcing] Enforce rigid temporal flow using sequential markers: "First, [Action A]. Immediately after, [Action B]. Finally, [Action C]." Suppress "reversed causal direction" or "simultaneous actions" in the Negative Prompt.
+
+4. **Targeted Token Surgery**:
+   Identify the exact failing token spans based on the above mapping. When populating the `rationale` in the `targeted_token_surgery` output, explicitly state which [Strategy] you applied.
 
 Output valid JSON matching this schema:
 {
