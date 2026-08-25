@@ -23,6 +23,7 @@ VERIFY_PROMPT = (
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
     "STEP 1: SUB-FACT DECOMPOSITION & PHYSICAL/CINEMATIC DYNAMICS PRE-REGISTRATION\n"
     "• Break down the claim into atomic sub-facts that must each individually hold true.\n"
+    "• Implicit Entity Deduction (CRITICAL): You MUST infer unstated physical subjects logically required by the verbs. For example, if the text says 'is kicked', a 'foot/leg' MUST be visibly present to perform the action. If 'is slashed', a 'blade' MUST be present. An object cannot act upon itself. If the implicit agent is missing, the action cannot be verified.\n"
     "• Specific Action/Motion Verification (CRITICAL): If the claim describes an action (e.g., 'kicked away', 'drawing sword', 'dashing'), you MUST explicitly confirm that the kinetic movement, contact, and displacement corresponding to that exact action happens. If subjects simply stand still, pose, or merely exist near each other without executing the action, mark as MISMATCH.\n"
     "• Single Continuous Shot / No-Cut Claims (CRITICAL): The attached frames are DISCRETE SAMPLES taken at intervals from a single video take. Frame-to-frame position jumps or rapid camera pans between sampled frames are normal sampling intervals, NOT video cuts! An actual 'CUT' only occurs if there is an abrupt, total discontinuity in environment/scene (e.g. instant teleportation from outdoor roof to indoor room, or instant camera perspective teleportation with completely disconnected geometry). If lighting, environment, and subject motion remain topologically continuous across the timeline, judge as a continuous shot (MATCH).\n"
     "• Fluid & Liquid Dynamics: Liquid flow, dripping, or bleeding requires ACTIVE, CONTINUOUS DOWNWARD DISPLACEMENT of liquid across sequential frames under gravity. Static blood stains, painted red streaks, or stationary droplets that remain frozen in position do NOT constitute 'flowing/dripping' -> mark as fluid physics failure.\n"
@@ -60,7 +61,7 @@ VERIFY_RESPONSE_SCHEMA = {
         },
         "entity_presence_check": {
             "type": "string",
-            "description": "Step 1 (Objects): Identify all nouns/entities (e.g., door, foot, hole, splinters). Confirm exactly which of these are visibly present in the frames."
+            "description": "Step 1 (Objects & Implicit Entities): Identify all explicit nouns. THEN, logically deduce any unstated physical entities required by the verbs (e.g., 'kicked' requires a 'foot'). Confirm exactly which of these explicit and implicit entities are visibly present."
         },
         "action_execution_check": {
             "type": "string",
