@@ -1,5 +1,15 @@
 import sys
+import os
+import time
+import json
+from pathlib import Path
 import importlib
+
+# Ensure repository root is in Python sys.path so modules like engine, agents, config can be resolved in any environment
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
+
 import engine.storyboard
 import engine.generator
 _ = importlib.reload(engine.storyboard)
@@ -12,16 +22,8 @@ _ = importlib.reload(sys.modules['engine.pipeline']) if 'engine.pipeline' in sys
 _ = importlib.reload(sys.modules['engine.claims']) if 'engine.claims' in sys.modules else None
 _ = importlib.reload(sys.modules['agents.prompt_director']) if 'agents.prompt_director' in sys.modules else None
 _ = importlib.reload(sys.modules['agents.mcp_client_wrapper']) if 'agents.mcp_client_wrapper' in sys.modules else None
-import sys
-import os
-import time
-import json
-from pathlib import Path
-import streamlit as st
 
-root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if root_dir not in sys.path:
-    sys.path.insert(0, root_dir)
+import streamlit as st
 
 from config.settings import settings
 from engine.claims import extract_claims
