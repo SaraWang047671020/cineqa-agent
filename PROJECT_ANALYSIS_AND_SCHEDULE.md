@@ -16,7 +16,7 @@
      ▼                                                 ▼                    ▼
 ┌──────────────────────────────────────────────────────┬────────────────────┐
 │ Phase 1 - 5: Accelerated Core Development & Testing  │ 3-Day Buffer Phase │
-│ (14 Days: Architecture, MAPIE, Grafana, Demo Video)  │ (Rehearsal & Sub)  │
+│ (14 Days: Architecture, Split-Conformal (LAC), Grafana, Demo Video)  │ (Rehearsal & Sub)  │
 └──────────────────────────────────────────────────────┴────────────────────┘
 ```
 
@@ -32,7 +32,7 @@
 | **Phase 2: Verification Engine & Agent Engine** | **Day 4 (08/27)** | Finalize 7-attribute atomic visual claim extraction (`engine/claims.py`). | 7-Attribute Claim Extractor |
 | | **Day 5 (08/28)** | Implement adaptive frame sampling (static 3-frame vs sequential 0.4s) & 5-step causal consensus verifier. | `engine/verify.py`, `engine/pipeline.py` |
 | | **Day 6 (08/29)** | Package verification core into `CineQAAgentEngine` compliant with Vertex AI Reasoning Engine specs. | `agents/agent_engine.py` |
-| **Phase 3: MAPIE 1.5.0 Benchmark Calibration** | **Day 7 (08/30)** | Ingest 90+ human-reviewed benchmark samples (`template.csv`) to calibrate MAPIE `SplitConformalRegressor`. | `agents/conformal_judge.py`, `eval/` |
+| **Phase 3: Split-Conformal (LAC) Benchmark Calibration** | **Day 7 (08/30)** | Ingest 90+ human-reviewed benchmark samples (`template.csv`) to calibrate Split-Conformal (LAC) `SplitConformalRegressor`. | `agents/conformal_judge.py`, `eval/` |
 | | **Day 8 (08/31)** | Run automated precision & recall benchmarking script (`run_precision_eval.py`) across all 7 visual categories. | Benchmark Evaluation Report |
 | **Phase 4: Remediation, Telemetry Replay & UI** | **Day 9 (09/01)** | Implement `agents/remediator.py` for automated prompt surgery, negative prompt generation & inpaint intervals. | Prompt Remediator Agent |
 | | **Day 10 (09/02)** | Polish Streamlit Studio UI (`ui/app.py`) with full interactive Verification Ledger and decision cards. | Streamlit Studio UI |

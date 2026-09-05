@@ -14,7 +14,7 @@ from config.settings import settings
 
 class VideoInspectorAgent:
     """
-    Inspects generated video against structured claims using Gemini 2.0 + MAPIE Conformal Judge.
+    Inspects generated video against structured claims using Gemini 2.0 + Split-Conformal (LAC) Conformal Judge.
     """
     def __init__(self, client: genai.Client = None):
         self.client = client or settings.get_genai_client()
@@ -62,7 +62,7 @@ class VideoInspectorAgent:
             PROMPT_ALIGNMENT_SCORE.labels(shot_id=shot_id, dimension='action').set(result['subject_action_score'])
             PROMPT_ALIGNMENT_SCORE.labels(shot_id=shot_id, dimension='lighting').set(result['lighting_environment_score'])
 
-            # Evaluate with MAPIE Conformal Uncertainty
+            # Evaluate with Split-Conformal (LAC) Conformal Uncertainty
             num_defects = len(result.get("timeline_defects", []))
             feature_vector = np.array([float(result["overall_raw_score"]), 100.0, 0.5, float(num_defects)])
             conformal_res = self.conformal_judge.evaluate_with_intervals(

@@ -51,7 +51,7 @@
       "collapsed": false,
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
       "id": 5,
-      "title": "MAPIE Conformal Uncertainty Bands (90% CI vs Score)",
+      "title": "Split-Conformal (LAC) Conformal Uncertainty Bands (90% CI vs Score)",
       "type": "timeseries",
       "targets": [
         { "expr": "cine_prompt_alignment_score", "legendFormat": "Point Score ({{dimension}})", "refId": "A" },
@@ -71,7 +71,7 @@
     }
   ],
   "schemaVersion": 39,
-  "tags": ["cinema", "agent", "gemini", "mapie"],
+  "tags": ["cinema", "agent", "gemini", "split_conformal_lac"],
   "time": { "from": "now-15m", "to": "now" },
   "timepicker": {},
   "timezone": "browser",

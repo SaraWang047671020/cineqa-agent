@@ -1,8 +1,8 @@
-# 📊 MAPIE 1.5.0 Conformal Decision Layer: Formal Calibration & Stability Report
+# 📊 Split-Conformal (LAC) Conformal Decision Layer: Formal Calibration & Stability Report
 
 ## 1. Executive Summary
 
-In autonomous AI cinema verification, heuristic confidence thresholds (e.g. static $0.85$ cutoffs) lack statistical validity and often exhibit model overconfidence. In **CineQA**, we implement a **Distribution-Free Conformal Prediction Decision Layer** using **MAPIE 1.5.0 (`SplitConformalClassifier` with `conformity_score="lac"`)**.
+In autonomous AI cinema verification, heuristic confidence thresholds (e.g. static $0.85$ cutoffs) lack statistical validity and often exhibit model overconfidence. In **CineQA**, we implement a **Distribution-Free Conformal Prediction Decision Layer** using **Split-Conformal (LAC) (`SplitConformalClassifier` with `conformity_score="lac"`)**.
 
 Rather than relying on uncalibrated model verbal confidence, our calibration uses the **empirical 3-call consensus agreement rate** measured against **92 human-annotated video takes** (covering Google Veo, Pika, Open-Sora, and PixVerse).
 
@@ -11,7 +11,7 @@ Rather than relying on uncalibrated model verbal confidence, our calibration use
 ## 2. Calibration Methodology & Data Pipeline
 
 ```
-[3-Call Independent Consensus Votes] ➔ [Vote Probability Vector X] ➔ [MAPIE 1.5.0 Prefit Classifier]
+[3-Call Independent Consensus Votes] ➔ [Vote Probability Vector X] ➔ [Split-Conformal (LAC) Prefit Classifier]
                                                                                 │
                                                                                 ▼
 [Ground Truth Verdict y] ➔ [Non-Conformity Scores R_i = 1 - P(y_i)] ➔ [Quantile Threshold q_(1-alpha)]
@@ -48,7 +48,7 @@ We evaluated formal calibration stability across **50 Monte Carlo Random Splits 
 
 ## 4. Agreement Rate to Decision Mapping Table
 
-From the calibrated MAPIE quantiles, the system establishes the following deterministic decision mapping:
+From the calibrated Split-Conformal (LAC) quantiles, the system establishes the following deterministic decision mapping:
 
 | Consensus Vote Pattern | Agreement Rate | Target 80% Prediction Set | Decision Policy Action |
 | :--- | :--- | :--- | :--- |

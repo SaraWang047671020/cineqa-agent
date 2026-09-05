@@ -1,0 +1,828 @@
+<title>CineQA Agent 技術簡報</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+  :root {
+    --ground: #FBFBFC;
+    --surface: #F1F2F5;
+    --surface-2: #E7E9EE;
+    --line: #D6D9E0;
+    --ink: #15171C;
+    --muted: #5C6472;
+    --accent: #A8631A;
+    --accent-soft: #F0E2CE;
+    --pass: #2C6E52;
+    --fail: #A93B3B;
+    --abstain: #5B6472;
+    --shadow: 0 1px 2px rgba(21, 23, 28, .06);
+
+    --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --f-body: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --measure: 68ch;
+    --gap: 1.25rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #141619;
+      --surface: #1B1E23;
+      --surface-2: #23272E;
+      --line: #333943;
+      --ink: #E7E9EC;
+      --muted: #98A2B0;
+      --accent: #E0A24A;
+      --accent-soft: #3A2E1C;
+      --pass: #63B58C;
+      --fail: #E07B7B;
+      --abstain: #98A2B0;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #141619;
+    --surface: #1B1E23;
+    --surface-2: #23272E;
+    --line: #333943;
+    --ink: #E7E9EC;
+    --muted: #98A2B0;
+    --accent: #E0A24A;
+    --accent-soft: #3A2E1C;
+    --pass: #63B58C;
+    --fail: #E07B7B;
+    --abstain: #98A2B0;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 16.5px;
+    line-height: 1.65;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell {
+    display: grid;
+    grid-template-columns: 1fr;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 1.5rem 6rem;
+  }
+
+  @media (min-width: 1020px) {
+    .shell { grid-template-columns: 210px minmax(0, 1fr); gap: 3.5rem; }
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead {
+    grid-column: 1 / -1;
+    border-bottom: 2px solid var(--ink);
+    padding: 3rem 0 1.5rem;
+    margin-bottom: 2.5rem;
+  }
+  .eyebrow {
+    font-family: var(--f-mono);
+    font-size: .72rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 1rem;
+  }
+  h1 {
+    font-family: var(--f-display);
+    font-weight: 700;
+    font-size: clamp(2.1rem, 5vw, 3.1rem);
+    letter-spacing: -.025em;
+    line-height: 1.05;
+    text-wrap: balance;
+    margin: 0 0 .9rem;
+  }
+  .standfirst {
+    max-width: var(--measure);
+    font-size: 1.08rem;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  .factstrip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 2.25rem;
+    margin-top: 1.75rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--line);
+  }
+  .fact { padding: .35rem 0; }
+  .fact dt {
+    font-family: var(--f-mono);
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 .15rem;
+  }
+  .fact dd {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: .95rem;
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- nav rail ---------- */
+  nav.rail { display: none; }
+  @media (min-width: 1020px) {
+    nav.rail {
+      display: block;
+      position: sticky;
+      top: 2rem;
+      align-self: start;
+      padding-top: .3rem;
+    }
+    nav.rail ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .55rem; }
+    nav.rail a {
+      font-family: var(--f-mono);
+      font-size: .74rem;
+      color: var(--muted);
+      text-decoration: none;
+      display: block;
+      line-height: 1.4;
+      border-left: 2px solid var(--line);
+      padding-left: .7rem;
+    }
+    nav.rail a:hover, nav.rail a:focus-visible { color: var(--accent); border-left-color: var(--accent); }
+  }
+
+  main { min-width: 0; }
+
+  section { margin-bottom: 3.5rem; scroll-margin-top: 1.5rem; }
+
+  h2 {
+    font-family: var(--f-display);
+    font-weight: 700;
+    font-size: 1.55rem;
+    letter-spacing: -.015em;
+    text-wrap: balance;
+    margin: 0 0 .35rem;
+  }
+  .sectionnote {
+    font-family: var(--f-mono);
+    font-size: .7rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 1.4rem;
+  }
+  h3 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 1.05rem;
+    letter-spacing: -.005em;
+    margin: 2rem 0 .5rem;
+  }
+  p { max-width: var(--measure); margin: 0 0 1rem; }
+  ul, ol { max-width: var(--measure); padding-left: 1.15rem; }
+  li { margin-bottom: .4rem; }
+  code {
+    font-family: var(--f-mono);
+    font-size: .84em;
+    background: var(--surface-2);
+    padding: .1em .35em;
+    border-radius: 3px;
+  }
+  a { color: var(--accent); }
+
+  /* ---------- pipeline (a real ordered sequence) ---------- */
+  .stages { list-style: none; padding: 0; margin: 0; max-width: none; }
+  .stage {
+    display: grid;
+    grid-template-columns: 2.6rem minmax(0, 1fr);
+    gap: 0 1rem;
+    padding: 1.15rem 0;
+    border-top: 1px solid var(--line);
+    margin: 0;
+  }
+  .stage:last-child { border-bottom: 1px solid var(--line); }
+  .stage-n {
+    font-family: var(--f-mono);
+    font-weight: 700;
+    font-size: .78rem;
+    color: var(--accent);
+    padding-top: .28rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .stage h3 { margin: 0 0 .25rem; font-size: 1rem; }
+  .stage p { margin: 0 0 .5rem; font-size: .97rem; }
+  .stage .where {
+    font-family: var(--f-mono);
+    font-size: .72rem;
+    color: var(--muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: .2rem .9rem;
+  }
+
+  /* ---------- tables ---------- */
+  .tablewrap { overflow-x: auto; margin: 1rem 0 1.5rem; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  th, td { text-align: left; padding: .55rem .8rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th {
+    font-family: var(--f-mono);
+    font-size: .68rem;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  td:first-child { font-family: var(--f-mono); font-size: .8rem; white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  /* ---------- verdict chips ---------- */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-family: var(--f-mono);
+    font-size: .7rem;
+    font-weight: 500;
+    letter-spacing: .04em;
+    padding: .12rem .45rem;
+    border-radius: 3px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .chip.pass { color: var(--pass); }
+  .chip.fail { color: var(--fail); }
+  .chip.abstain { color: var(--abstain); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: .6rem 1.1rem; margin: 1rem 0 1.4rem; }
+  .legend div { font-size: .88rem; color: var(--muted); display: flex; align-items: center; gap: .5rem; }
+
+  /* ---------- callout ---------- */
+  .note {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: .85rem 1.1rem;
+    margin: 1.25rem 0;
+    max-width: var(--measure);
+    font-size: .94rem;
+  }
+  .note strong { font-family: var(--f-display); }
+
+  /* ---------- code block ---------- */
+  pre {
+    font-family: var(--f-mono);
+    font-size: .78rem;
+    line-height: 1.6;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: .9rem 1rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  /* ---------- status list ---------- */
+  .status { list-style: none; padding: 0; margin: 0; max-width: none; }
+  .status li {
+    display: grid;
+    grid-template-columns: 7.5rem minmax(0, 1fr);
+    gap: 0 1rem;
+    padding: .8rem 0;
+    border-top: 1px solid var(--line);
+    margin: 0;
+  }
+  .status li:last-child { border-bottom: 1px solid var(--line); }
+  .status .s-label { padding-top: .12rem; }
+  .status p { margin: 0; font-size: .95rem; }
+  .status .s-title { font-family: var(--f-display); font-weight: 600; font-size: .97rem; margin-bottom: .15rem; }
+
+  /* ---------- diagram ---------- */
+  figure { margin: 1.25rem 0 1.75rem; }
+  .diagram { overflow-x: auto; }
+  figcaption {
+    font-family: var(--f-mono);
+    font-size: .72rem;
+    color: var(--muted);
+    margin-top: .6rem;
+  }
+
+  footer {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--line);
+    padding-top: 1.25rem;
+    font-family: var(--f-mono);
+    font-size: .72rem;
+    color: var(--muted);
+  }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="shell">
+
+  <header class="masthead">
+    <p class="eyebrow">Agentic Cinema Hackathon · 內部技術簡報</p>
+    <h1>CineQA Agent</h1>
+    <p class="standfirst">
+      把導演的一段文字 prompt 拆成一條條「可被驗證的視覺主張」，逐條比對生成影片，抓出人眼容易漏掉的時空破綻，
+      並自動改寫 prompt 重新生成，直到通過為止。這份文件說明整條 pipeline、驗證的判斷邏輯，以及 ClickHouse 記憶層怎麼串。
+    </p>
+    <dl class="factstrip">
+      <div class="fact"><dt>驗證模型</dt><dd>gemini-2.5-flash</dd></div>
+      <div class="fact"><dt>影片生成</dt><dd>veo-3.1-fast</dd></div>
+      <div class="fact"><dt>關鍵幀</dt><dd>gemini-2.5-flash-image</dd></div>
+      <div class="fact"><dt>每條 claim 投票數</dt><dd>3</dd></div>
+      <div class="fact"><dt>覆蓋率保證</dt><dd>80%</dd></div>
+      <div class="fact"><dt>校準樣本</dt><dd>92 筆</dd></div>
+    </dl>
+  </header>
+
+  <nav class="rail" aria-label="章節導覽">
+    <ol>
+      <li><a href="#idea">核心概念</a></li>
+      <li><a href="#pipeline">完整流程</a></li>
+      <li><a href="#claims">Claim 分類</a></li>
+      <li><a href="#judge">單條 claim 怎麼被判</a></li>
+      <li><a href="#conformal">共識與統計決策</a></li>
+      <li><a href="#clickhouse">ClickHouse 串接</a></li>
+      <li><a href="#status">現況與待辦</a></li>
+      <li><a href="#run">怎麼跑起來</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section id="idea">
+      <h2>核心概念</h2>
+      <p class="sectionnote">為什麼不是「看起來對就好」</p>
+      <p>
+        生成式影片最常見的失敗不是畫質差，而是<strong>看起來很漂亮但根本不是你要的東西</strong>：
+        你要角色從畫面左邊走到右邊，結果是鏡頭在跟拍、角色其實原地沒動；
+        你要門被踢破，結果門破了之後又自己癒合。這些破綻用肉眼看很容易放過。
+      </p>
+      <p>
+        CineQA 的做法是把「這支影片對不對」這個模糊問題，拆成 6–12 條各自獨立、可以打勾或打叉的具體主張（claim），
+        逐條驗證後產出一份 <strong>Verification Ledger</strong>。每條 claim 有三種判定：
+      </p>
+      <div class="legend">
+        <div><span class="chip pass">MATCH</span> 影片符合這條主張</div>
+        <div><span class="chip fail">MISMATCH</span> 影片牴觸這條主張</div>
+        <div><span class="chip abstain">CANNOT_DETERMINE</span> 證據不足，系統承認判不了</div>
+      </div>
+      <p>
+        第三種判定很重要：它是系統誠實承認「這一條我沒把握」的出口，
+        而不是硬在對錯之間丟銅板。整套統計決策層（後面會講）就是為了決定什麼時候該說這句話。
+      </p>
+    </section>
+
+    <section id="pipeline">
+      <h2>完整流程</h2>
+      <p class="sectionnote">這是一條有序的 pipeline，編號代表實際執行順序</p>
+
+      <ol class="stages">
+        <li class="stage">
+          <div class="stage-n">01</div>
+          <div>
+            <h3>Claim 抽取</h3>
+            <p>把導演 prompt（可能好幾百字）蒸餾成 6–12 條高影響力的可驗證主張，每條標上型別、時間屬性、抽樣策略與所屬 tier。UI 另外在最前面注入一條 Tier 0 的通用物理檢查。</p>
+            <div class="where"><span>engine/claims.py</span><span>extract_claims()</span><span>temperature 0.1</span></div>
+          </div>
+        </li>
+        <li class="stage">
+          <div class="stage-n">02</div>
+          <div>
+            <h3>Pre-Flight 關鍵幀</h3>
+            <p>在燒掉影片額度之前，先生一張「首幀」做低成本 QA；需要時再用 image-to-image 從首幀衍生一張「尾幀」，讓兩張圖的角色與美術風格保持一致。首尾幀之後會餵給 Veo 做插值，用畫面鎖住動作的起點與終點。</p>
+            <div class="where"><span>engine/storyboard.py</span><span>generate_storyboard()</span><span>base_image_path = I2I</span></div>
+          </div>
+        </li>
+        <li class="stage">
+          <div class="stage-n">03</div>
+          <div>
+            <h3>影片生成</h3>
+            <p>呼叫 Veo，可帶入首幀、尾幀（frame interpolation）、最多數張參考圖（ASSET / STYLE）、負向 prompt、固定 seed 與 inpaint mask。seed 會記錄在 take 上，讓後續重生成可以只變動 prompt、控制變因。</p>
+            <div class="where"><span>engine/generator.py</span><span>veo-3.1-fast-generate-001</span><span>1080p</span></div>
+          </div>
+        </li>
+        <li class="stage">
+          <div class="stage-n">04</div>
+          <div>
+            <h3>抽幀</h3>
+            <p>依 claim 的時間屬性與型別決定抽樣密度：靜態類抽 3 幀；顏色／數量／風格類上限 5 幀；動作與方向類最多 20 幀。多執行緒平行呼叫 ffmpeg，縮到寬 800px 以控制上傳量。</p>
+            <div class="where"><span>engine/verify.py</span><span>extract_frames()</span><span>ThreadPoolExecutor(8)</span></div>
+          </div>
+        </li>
+        <li class="stage">
+          <div class="stage-n">05</div>
+          <div>
+            <h3>逐條驗證</h3>
+            <p>每條 claim 獨立組一份 prompt（依型別插入不同的檢查區塊），連同抽出的幀送進 Gemini，要求以結構化 JSON 回覆。同一條 claim 平行跑 3 票。claim 與 claim 之間也是平行處理。</p>
+            <div class="where"><span>engine/pipeline.py</span><span>stream_pipeline()</span><span>ThreadPoolExecutor(5)</span></div>
+          </div>
+        </li>
+        <li class="stage">
+          <div class="stage-n">06</div>
+          <div>
+            <h3>統計決策</h3>
+            <p>3 票丟進 Split-Conformal 判決層，算出 prediction set。集合大小為 1 才算「可自主判定」；大於 1 代表模型內部有分歧，走多數決或直接標記為不確定。</p>
+            <div class="where"><span>agents/conformal_judge.py</span><span>LAC score</span><span>confidence 0.80</span></div>
+          </div>
+        </li>
+        <li class="stage">
+          <div class="stage-n">07</div>
+          <div>
+            <h3>修正與重生（Auto-Heal）</h3>
+            <p>把失敗的 claim 交給 remediator，它會<strong>先透過 MCP 去 ClickHouse 查「同類問題以前怎麼修好的」</strong>，再產出新的正向／負向 prompt 與 token 級修改清單，重新生成一支 take，然後回到步驟 04 再驗一次。</p>
+            <div class="where"><span>agents/remediator.py</span><span>Gemini function calling</span><span>MCP tool</span></div>
+          </div>
+        </li>
+      </ol>
+
+      <div class="note">
+        <strong>寫入時機：</strong>每一輪驗證跑完，ledger 會在背景執行緒非同步寫進 ClickHouse，不阻塞畫面；
+        第二個 take 之後還會額外寫入一筆「修正案例」——這就是下一輪 Auto-Heal 能查到的記憶。
+      </div>
+    </section>
+
+    <section id="claims">
+      <h2>Claim 分類</h2>
+      <p class="sectionnote">型別決定驗證時套用哪些檢查規則</p>
+
+      <h3>型別（type）</h3>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>型別</th><th>檢查什麼</th><th>驗證時額外套用</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>action</td><td>動詞是否真的發生（不只是「物件存在」）</td><td>隱含主體推導、接觸與後果檢查</td></tr>
+            <tr><td>direction</td><td>螢幕座標上的實際位移</td><td>鏡頭跟拍 vs 主體位移的拆解</td></tr>
+            <tr><td>relative_position</td><td>A 與 B 的相對位置，且需跨幀維持</td><td>質心座標數學檢查</td></tr>
+            <tr><td>relative_size</td><td>尺寸比較，需對應到正確的幾何軸</td><td>深度平面與透視校正</td></tr>
+            <tr><td>color</td><td>顏色與屬性綁定是否正確</td><td>—</td></tr>
+            <tr><td>count</td><td>數量</td><td>只計顯著實例，忽略背景雜訊</td></tr>
+            <tr><td>state</td><td>狀態與狀態轉換</td><td>時序比對</td></tr>
+            <tr><td>style</td><td>美術媒材與風格</td><td>渲染技法判別</td></tr>
+            <tr><td>physics_sanity</td><td>Tier 0：全域物理與拓樸連續性</td><td>物體恆存、肢體連續、穿模、姿態跳動</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>層級（tier）</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Tier</th><th>意義</th></tr></thead>
+          <tbody>
+            <tr><td>tier1_causal_action</td><td>核心因果時間軸：觸發事件、物理反應、動作完成</td></tr>
+            <tr><td>tier2_spatial_geometry</td><td>嚴格的空間對位與構圖邊界</td></tr>
+            <tr><td>tier3_multimodal_consistency</td><td>與概念圖／分鏡的一致性，以及整體美術風格</td></tr>
+            <tr><td>tier4_physics_defect_control</td><td>物理定律與負向缺陷抑制</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        <strong>設計上的關鍵決定：</strong>Tier 0 的物理檢查只由那一條專屬 claim 負責。
+        其他 claim 不再重複掃描整支影片的物理問題——否則影片任何角落的一個小瑕疵，會把所有不相關的 claim 一起拖下水判死。
+      </div>
+    </section>
+
+    <section id="judge">
+      <h2>單條 claim 怎麼被判</h2>
+      <p class="sectionnote">組 prompt → 附帶客觀證據 → 結構化回覆</p>
+
+      <h3>五步驗證協定</h3>
+      <p>每條 claim 的 prompt 都以同一套協定開頭：拆解子事實 → 客觀觀察與座標錨定（不得提前下結論）→ 證據充分性評估 → 區分 AI 生成瑕疵是否落在判斷範圍內 → 形成判定並做反向因果檢查。</p>
+
+      <h3>依型別掛載的檢查區塊</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>區塊</th><th>掛載條件</th><th>作用</th></tr></thead>
+          <tbody>
+            <tr><td>BLOCK_SPATIAL</td><td>一律</td><td>把比較詞對應到正確幾何軸，避免用面積冒充高度</td></tr>
+            <tr><td>BLOCK_ACTION</td><td>type = action</td><td>區分「動作發生」與「狀態存在」；要求觀察實際接觸與後果</td></tr>
+            <tr><td>BLOCK_DIRECTION</td><td>type = direction</td><td>要求算出螢幕座標，並拆解鏡頭跟拍造成的假位移</td></tr>
+            <tr><td>BLOCK_POSITIONING</td><td>claim 含方位詞</td><td>質心座標的數學比較，且需跨幀維持</td></tr>
+            <tr><td>BLOCK_SEQUENTIAL</td><td>temporal = sequential</td><td>連續鏡頭判斷、流體動力學、因果完整性、拓樸持久性</td></tr>
+            <tr><td>BLOCK_PHYSICS_LAWS</td><td>temporal = sequential</td><td>重力支撐、動量守恆、剛體碰撞、材質對應運動</td></tr>
+            <tr><td>BLOCK_PHYSICS_SANITY</td><td>type = physics_sanity</td><td>物體恆存、肢體連續、穿模、姿態跳動</td></tr>
+            <tr><td>BLOCK_COUNT / STYLE / REFERENCE</td><td>對應型別／有參考圖</td><td>數量、美術風格、與概念圖的一致性</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>給模型不會幻覺的客觀證據</h3>
+      <p>
+        VLM 不擅長用眼睛估計「兩幀之間到底動了多少」，但傳統 CV 演算法很擅長。
+        所以每張幀的標籤除了時間戳，還會附上與前一幀的<strong>灰階像素差值</strong>，並標記等級：
+      </p>
+      <pre><code>[FRAME_3 @ t=1.20s]
+[FRAME_4 @ t=1.40s | pixel-diff vs prev frame: 2.1 (LOW，可能停滯)]
+[FRAME_5 @ t=1.60s | pixel-diff vs prev frame: 48.3 (HIGH，可能跳接)]</code></pre>
+      <p>
+        判斷「有沒有跳接」時，模型被要求以這個數字為主要依據，而不是憑視覺印象——
+        因為構圖差很多不代表是剪接，那通常只是抽樣間隔造成的。
+      </p>
+
+      <h3>結構化回覆</h3>
+      <p>模型必須以固定 schema 回覆，重點欄位：</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>欄位</th><th>內容</th></tr></thead>
+          <tbody>
+            <tr><td>checkable_components</td><td>這條 claim 被拆成哪些子事實</td></tr>
+            <tr><td>frame_observations</td><td>逐幀客觀描述（不含結論）</td></tr>
+            <tr><td>motion_anchoring_check</td><td>主體首尾幀的 X 座標百分比，以及背景是否位移</td></tr>
+            <tr><td>spatial_geometry_check</td><td>各實體佔畫面高／寬的百分比與數學驗算</td></tr>
+            <tr><td>physics_law_grounding_check</td><td>四條物理定律哪些適用、是否成立，須引用幀號</td></tr>
+            <tr><td>physics_and_reality_sanity_check</td><td>本 claim 主體是否遭遇幻覺類瑕疵</td></tr>
+            <tr><td>evidence_sufficiency_check</td><td>支持／牴觸證據分別在哪幾幀，充分性等級</td></tr>
+            <tr><td>verdict / confidence</td><td>最終判定與自評信心</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="conformal">
+      <h2>共識與統計決策</h2>
+      <p class="sectionnote">3 票 → prediction set → 判定</p>
+
+      <p>
+        同一條 claim 平行跑 3 次（第一票 temperature 0.1，其餘 0.3），得到一組投票分佈。
+        這組分佈不是直接多數決，而是先進入 <strong>Split-Conformal（LAC）</strong> 判決層。
+      </p>
+
+      <h3>校準怎麼做</h3>
+      <ol>
+        <li>對每筆標註資料算 non-conformity score：<code>s = 1 − P(真實類別)</code></li>
+        <li>取這些分數的 <code>⌈(n+1)×0.80⌉ / n</code> 分位數，得到門檻 <code>q̂</code>（目前為 <code>0.667</code>，n = 92）</li>
+        <li>判定時：<code>1 − P(類別) ≤ q̂</code> 的類別，全部放進 prediction set</li>
+      </ol>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>投票</th><th>Prediction set</th><th>最終判定</th></tr></thead>
+          <tbody>
+            <tr><td>MATCH ×3</td><td>{MATCH}</td><td><span class="chip pass">MATCH</span> 可自主判定</td></tr>
+            <tr><td>MATCH ×2, MISMATCH ×1</td><td>{MATCH, MISMATCH}</td><td><span class="chip pass">MATCH</span> 多數決，標記為不確定</td></tr>
+            <tr><td>MATCH ×1, MISMATCH ×2</td><td>{MATCH, MISMATCH}</td><td><span class="chip fail">MISMATCH</span> 多數決，標記為不確定</td></tr>
+            <tr><td>三票分歧</td><td>{全部}</td><td><span class="chip abstain">CANNOT_DETERMINE</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        每一列 ledger 都會記下 <code>conformal_set_size</code> 與 <code>is_autonomous</code>，並寫進 ClickHouse。
+        所以「系統有多少比例的判斷是自己就能拍板的、多少比例需要人工複核」，
+        可以直接用一句 SQL 查出來——這是整套風險控制機制存在的意義。
+      </p>
+
+      <div class="note">
+        <strong>要注意的限制：</strong>92 筆校準樣本在 80% 信心水準下，實測覆蓋率平均 0.848、
+        標準差約 0.11。也就是說這個保證本身還有不小的變異，樣本數需要再擴充才能講得更硬。
+      </div>
+    </section>
+
+    <section id="clickhouse">
+      <h2>ClickHouse 串接</h2>
+      <p class="sectionnote">兩條獨立的路：寫入是普通 client，讀取走 MCP</p>
+
+      <p>
+        ClickHouse 在這個專案裡不只是「事後分析用的資料庫」，而是<strong>修正 agent 的長期記憶</strong>。
+        寫入與讀取走的是兩條完全不同的路徑，而且只有讀取那條需要經過 MCP。
+      </p>
+
+      <figure>
+        <div class="diagram">
+          <svg viewBox="0 0 720 320" width="720" height="320" role="img" aria-label="ClickHouse 寫入與讀取路徑示意圖">
+            <defs>
+              <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"></path>
+              </marker>
+            </defs>
+            <g fill="none" stroke="currentColor" color="var(--muted)" stroke-width="1.4" marker-end="url(#ar)">
+              <path d="M150 62 H 286"></path>
+              <path d="M410 62 H 520"></path>
+              <path d="M150 236 H 286"></path>
+              <path d="M410 236 H 520"></path>
+              <path d="M596 96 V 202"></path>
+            </g>
+
+            <g font-family="JetBrains Mono, monospace" font-size="11">
+              <!-- write path -->
+              <rect x="12" y="40" width="138" height="44" rx="4" fill="var(--surface)" stroke="var(--line)"></rect>
+              <text x="81" y="59" text-anchor="middle" fill="var(--ink)">ui/app.py</text>
+              <text x="81" y="74" text-anchor="middle" fill="var(--muted)">背景執行緒</text>
+
+              <rect x="286" y="40" width="124" height="44" rx="4" fill="var(--surface)" stroke="var(--line)"></rect>
+              <text x="348" y="59" text-anchor="middle" fill="var(--ink)">database/</text>
+              <text x="348" y="74" text-anchor="middle" fill="var(--ink)">logger.py</text>
+
+              <!-- read path -->
+              <rect x="12" y="214" width="138" height="44" rx="4" fill="var(--surface)" stroke="var(--line)"></rect>
+              <text x="81" y="233" text-anchor="middle" fill="var(--ink)">remediator.py</text>
+              <text x="81" y="248" text-anchor="middle" fill="var(--muted)">Gemini tool call</text>
+
+              <rect x="286" y="214" width="124" height="44" rx="4" fill="var(--surface)" stroke="var(--line)"></rect>
+              <text x="348" y="233" text-anchor="middle" fill="var(--ink)">mcp_server.py</text>
+              <text x="348" y="248" text-anchor="middle" fill="var(--muted)">stdio 子行程</text>
+
+              <!-- db -->
+              <rect x="520" y="96" width="152" height="106" rx="4" fill="var(--surface-2)" stroke="var(--accent)" stroke-width="1.5"></rect>
+              <text x="596" y="122" text-anchor="middle" fill="var(--ink)" font-weight="700">ClickHouse</text>
+              <text x="596" y="146" text-anchor="middle" fill="var(--muted)">verification_ledger</text>
+              <text x="596" y="166" text-anchor="middle" fill="var(--muted)">remediation_history</text>
+              <text x="596" y="190" text-anchor="middle" fill="var(--muted)">timeout 5s / 10s</text>
+
+              <text x="218" y="34" text-anchor="middle" fill="var(--accent)">寫入路徑</text>
+              <text x="218" y="208" text-anchor="middle" fill="var(--accent)">讀取路徑（MCP）</text>
+            </g>
+          </svg>
+        </div>
+        <figcaption>寫入用一般 clickhouse-connect client；讀取一律經過 MCP server，這是 track 的硬性要求。</figcaption>
+      </figure>
+
+      <h3>連線層</h3>
+      <p>
+        <code>database/clickhouse_init.py</code> 的 <code>get_client()</code> 是模組級單例，
+        連線只建立一次並重複使用，避免每次寫入都重跑一次 TLS 握手。連線帶 5 秒建立逾時與 10 秒讀寫逾時——
+        沒有逾時的話，只要網路有任何問題，UI 就會無聲地卡住很久。
+      </p>
+
+      <h3>兩張表</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>表</th><th>一列代表</th><th>關鍵欄位</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>verification_ledger</td>
+              <td>某個 take 的某一條 claim 的驗證結果</td>
+              <td>scene_id, take_num, claim_id, claim_type, verdict, confidence, conformal_set_size, is_autonomous, consensus_votes, observed</td>
+            </tr>
+            <tr>
+              <td>remediation_history</td>
+              <td>一次「修正嘗試」的完整案例</td>
+              <td>claim_type, claim_text, failure_observed, refined_positive_prompt, negative_prompt, take_num_before, take_num_after, outcome_verdict</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>記憶迴圈</h3>
+      <p>
+        <code>remediation_history</code> 只在第二個 take 之後才寫，而且只寫<strong>前一輪判 MISMATCH 的那些 claim</strong>。
+        每一列記錄的是一個完整故事：
+      </p>
+      <ul>
+        <li><code>failure_observed</code>：前一輪那條 claim 的實際失敗描述</li>
+        <li><code>refined_positive_prompt</code>：針對它做的具體措辭修改（來自 remediation plan 的 token surgery）</li>
+        <li><code>outcome_verdict</code>：這一輪重驗的結果——<strong>也就是「這個修法有沒有用」的標籤</strong></li>
+      </ul>
+
+      <h3>讀取：MCP tool</h3>
+      <p>
+        <code>mcp_server.py</code> 以 <code>MCPServer</code> 起一個 stdio server，對外只暴露一個工具：
+      </p>
+      <pre><code>search_remediation_history(claim_type: str) -> str
+
+SELECT claim_text, failure_observed, refined_positive_prompt
+FROM remediation_history
+WHERE claim_type = %(ct)s AND outcome_verdict = 'MATCH'
+ORDER BY ts DESC LIMIT 3</code></pre>
+      <p>
+        注意 <code>outcome_verdict = 'MATCH'</code> 這個條件：<strong>只回傳真的修好的案例</strong>，
+        失敗的修法不會污染記憶。remediator 把這個函式當成 Gemini 的 tool 掛進 chat session，
+        由模型自己決定要不要查、查哪個 claim_type——這是「agentic」的部分，不是我們寫死的流程。
+      </p>
+
+      <div class="note">
+        <strong>記憶要先累積才有效。</strong>查詢條件是「修成功的案例」，所以必須先跑過幾輪完整的
+        Auto-Heal（失敗 → 修正 → 重生 → 通過），表裡才會有東西。Demo 前需要預先批次跑資料。
+      </div>
+    </section>
+
+    <section id="status">
+      <h2>現況與待辦</h2>
+      <p class="sectionnote">給組員的誠實版本</p>
+
+      <ul class="status">
+        <li>
+          <div class="s-label"><span class="chip pass">可用</span></div>
+          <div>
+            <div class="s-title">驗證主流程</div>
+            <p>claim 抽取 → 抽幀 → 3 票共識 → conformal 判決 → ledger，端到端可跑。實測一支有真實瑕疵的影片為 5/8 通過，失敗的三條理由具體且可對照。</p>
+          </div>
+        </li>
+        <li>
+          <div class="s-label"><span class="chip pass">可用</span></div>
+          <div>
+            <div class="s-title">ClickHouse 寫入與 MCP 讀取</div>
+            <p>連線單例、逾時、批次寫入、MCP server（已修正為 mcp 2.x 的 <code>MCPServer</code> API）皆已打通。</p>
+          </div>
+        </li>
+        <li>
+          <div class="s-label"><span class="chip abstain">待驗證</span></div>
+          <div>
+            <div class="s-title">整體精確率</div>
+            <p>目前只有單一案例的觀察，尚未用 <code>eval/run_precision_eval.py</code> 跑過標註集量出精確率。校準資料的產出時間也早於近期多輪 prompt 修改，建議重新校準。</p>
+          </div>
+        </li>
+        <li>
+          <div class="s-label"><span class="chip fail">已知問題</span></div>
+          <div>
+            <div class="s-title">Claim 抽取會自行加入細節</div>
+            <p>觀察到抽取階段會憑空補上原始 prompt 沒提到的具體零件（門鎖、門栓、拱形走廊），導致產生無法通過的假 claim。需要在抽取 prompt 加上「不得引入原文未指定的具體名詞」的硬規則。</p>
+          </div>
+        </li>
+        <li>
+          <div class="s-label"><span class="chip fail">已知問題</span></div>
+          <div>
+            <div class="s-title">否定式 claim 的空洞通過</div>
+            <p>「停住時沒有穿透牆壁」這類以「沒有發生 X」為條件的 claim，當前提根本沒發生時會被判 MATCH，但這個通過是空的。需要要求先確認前提成立，否則回 CANNOT_DETERMINE。</p>
+          </div>
+        </li>
+        <li>
+          <div class="s-label"><span class="chip fail">已知問題</span></div>
+          <div>
+            <div class="s-title">UI 畫面重整</div>
+            <p>Streamlit 畫面偶發持續重整、右上角執行指示不停。尚未定位，需要確認閒置時是否自發、WebSocket 是否反覆重連。</p>
+          </div>
+        </li>
+        <li>
+          <div class="s-label"><span class="chip abstain">待確認</span></div>
+          <div>
+            <div class="s-title">官方 mcp-clickhouse 合規</div>
+            <p>比賽規則寫的是透過「官方 <code>mcp-clickhouse</code>」存取，我們目前是自建 MCP server 包 ClickHouse。精神一致，但字面上是否算數需要跟主辦確認。</p>
+          </div>
+        </li>
+        <li>
+          <div class="s-label"><span class="chip abstain">未完成</span></div>
+          <div>
+            <div class="s-title">缺陷定位與局部重繪</div>
+            <p>兩段式 bbox 定位（先問哪一幀、再單獨問座標）與 mask 局部重繪的骨架已存在，但尚未接成完整可用的流程。</p>
+          </div>
+        </li>
+      </ul>
+
+      <div class="note">
+        <strong>踩過的坑，請記得：</strong>Streamlit 只會重跑主腳本，不會重新載入已 import 的模組。
+        改了 <code>engine/verify.py</code> 之後如果沒有完整重啟 process，UI 跑的還是舊版程式碼——
+        我們為此追了好幾輪不存在的 bug。<code>ui/app.py</code> 頂端已加入對應的 reload 清單，
+        但改動核心模組後仍建議完整重啟。
+      </div>
+    </section>
+
+    <section id="run">
+      <h2>怎麼跑起來</h2>
+      <p class="sectionnote">本機開發環境</p>
+
+      <pre><code># 1. 依賴
+pip install -r requirements.txt
+
+# 2. 環境變數（.env）
+GOOGLE_CLOUD_PROJECT=...
+GOOGLE_CLOUD_LOCATION=us-central1
+DEFAULT_GEMINI_MODEL=gemini-2.5-flash
+CLICKHOUSE_HOST=...
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=...
+
+# 3. 建立 ClickHouse 資料表（只需一次）
+python database/clickhouse_init.py
+
+# 4. 確認 MCP 記憶鏈路通了
+python -c "from agents.mcp_client_wrapper import search_clickhouse_memory; print(search_clickhouse_memory('action'))"
+#   預期：No historical fixes found for claim type: action.（表示通了，只是還沒資料）
+
+# 5. 起主程式
+streamlit run ui/app.py</code></pre>
+
+      <p>
+        另外有兩支獨立工具：<code>eval/run_precision_eval.py</code> 用標註集量測驗證精確率，
+        <code>eval/calibrate_mapie_formal.py</code> 重新產生 conformal 判決層的校準資料。
+      </p>
+    </section>
+
+  </main>
+
+  <footer>
+    CineQA Agent · 內部技術簡報 · 內容反映目前 repo 狀態，「現況與待辦」章節請以實際程式碼為準
+  </footer>
+
+</div>

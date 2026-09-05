@@ -78,9 +78,9 @@ def main():
                          help="只跑指定的 claim_id，逗號分隔，例如 c_0016,c_0024（除錯/迭代 prompt 用，省錢）")
     parser.add_argument("--force-consensus", action="store_true",
                          help="不管自報信心分數多高，每條 claim 都強制跑滿 3 次獨立呼叫——"
-                              "MAPIE 校準需要真正的共識一致率，用這個 flag 才有乾淨資料可用")
+                              "Split-Conformal (LAC) 校準需要真正的共識一致率，用這個 flag 才有乾淨資料可用")
     parser.add_argument("--export-calibration", default=None,
-                         help="把每條 claim 的一致率/多數決結果/人工標註寫成 JSON，供 MAPIE 校準腳本讀取，"
+                         help="把每條 claim 的一致率/多數決結果/人工標註寫成 JSON，供 Split-Conformal (LAC) 校準腳本讀取，"
                               "例如 --export-calibration labeled_set/calibration_data.json")
     args = parser.parse_args()
 
@@ -123,6 +123,7 @@ def main():
         results.append({
             "claim_id": row["claim_id"],
             "claim_text": row["claim_text"],
+            "claim_type": row.get("type", "state"),
             "ground_truth": row["ground_truth_verdict"],
             "system_verdict": system_verdict,
             "observed": verdict_data.get("observed", ""),
@@ -146,9 +147,9 @@ def main():
 
 
 def export_calibration_data(results, out_path, force_consensus):
-    """把每條 claim 的共識一致率、多數決結果、人工標註寫成 JSON，供 MAPIE 校準腳本讀取。
+    """把每條 claim 的共識一致率、多數決結果、人工標註寫成 JSON，供 Split-Conformal (LAC) 校準腳本讀取。
 
-    對應 PROJECT_PLAN.md 第 9 節第 7 點：MAPIE 校準的分數是「共識一致率」（3 次獨立呼叫裡
+    對應 PROJECT_PLAN.md 第 9 節第 7 點：Split-Conformal (LAC) 校準的分數是「共識一致率」（3 次獨立呼叫裡
     有幾次判斷一致），不是 Gemini 自報的 confidence。只有真的跑滿 `CONSENSUS_ROUNDS` 次的
     claim（force_consensus=True，或剛好自報信心低於門檻觸發了完整共識）才有意義的一致率；
     只打過 1 次的 claim，agreement_rate 標記為 None，不能拿 1/1=100% 冒充「完全一致」，
@@ -215,6 +216,29 @@ def report(results, dry_run):
     missed_mismatch_rate = len(missed_mismatch) / len(ground_truth_mismatch) if ground_truth_mismatch else None
     cannot_determine_rate = sum(1 for r in results if r["system_verdict"] == "CANNOT_DETERMINE") / len(results)
 
+
+    # Calculate metrics by claim_type (Item 2)
+    from collections import defaultdict
+    type_metrics = defaultdict(lambda: {"correct_mismatch": 0, "predicted_mismatch": 0, "false_alarms": 0, "ground_truth_match": 0})
+    for r in results:
+        t = r.get("claim_type", "unknown")
+        if r["ground_truth"] == "MATCH":
+            type_metrics[t]["ground_truth_match"] += 1
+        if r["system_verdict"] == "MISMATCH":
+            type_metrics[t]["predicted_mismatch"] += 1
+            if r["ground_truth"] == "MISMATCH":
+                type_metrics[t]["correct_mismatch"] += 1
+            elif r["ground_truth"] == "MATCH":
+                type_metrics[t]["false_alarms"] += 1
+
+    print("\n" + "=" * 60)
+    print("【分類別指標 Breakdown by claim_type】")
+    for t, m in type_metrics.items():
+        type_precision = m["correct_mismatch"] / m["predicted_mismatch"] if m["predicted_mismatch"] > 0 else None
+        type_far = m["false_alarms"] / m["ground_truth_match"] if m["ground_truth_match"] > 0 else None
+        prec_str = f"{type_precision:.1%}" if type_precision is not None else "N/A"
+        far_str = f"{type_far:.1%}" if type_far is not None else "N/A"
+        print(f" - [{t}] 精確率(Precision): {prec_str} | 誤報率(FAR): {far_str} (誤報: {m['false_alarms']}/{m['ground_truth_match']})")
     print("\n" + "-" * 60)
     print(f"總計 {len(results)} 條 claim")
     print(f"系統判 MISMATCH 的 {len(predicted_mismatch)} 條裡，"

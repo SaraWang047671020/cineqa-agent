@@ -1,67 +1,40 @@
-from prometheus_client import Counter, Gauge, Histogram, Summary
+﻿class DummyMetric:
+    def __init__(self, *args, **kwargs): pass
+    def inc(self, *args, **kwargs): pass
+    def dec(self, *args, **kwargs): pass
+    def observe(self, *args, **kwargs): pass
+    def set(self, *args, **kwargs): pass
+    def labels(self, *args, **kwargs): return self
 
-# --- Quality & Alignment Gauges ---
-PROMPT_ALIGNMENT_SCORE = Gauge(
-    'cine_prompt_alignment_score', 
-    'Prompt adherence score from Gemini (0-100)', 
-    ['shot_id', 'dimension']
-)
+Counter = DummyMetric
+Gauge = DummyMetric
+Histogram = DummyMetric
+Summary = DummyMetric
 
-CONFIDENCE_INTERVAL_LOWER = Gauge(
-    'cine_score_ci_lower_bound', 
-    'MAPIE 90% Confidence Interval Lower Bound', 
-    ['shot_id', 'dimension']
-)
+PROMPT_ALIGNMENT_SCORE = DummyMetric()
+CONFIDENCE_INTERVAL_LOWER = DummyMetric()
+CONFIDENCE_INTERVAL_UPPER = DummyMetric()
+UNCERTAINTY_WIDTH = DummyMetric()
+CONFORMAL_SET_SIZE_HISTOGRAM = DummyMetric()
+UNCERTAIN_VERDICTS_COUNTER = DummyMetric()
+TAKES_TOTAL = DummyMetric()
+HUMAN_REVIEWS_TRIGGERED = DummyMetric()
+DOLLARS_SAVED_ESTIMATE = DummyMetric()
+INSPECTION_DURATION_SECONDS = DummyMetric()
+REMEDIATION_DURATION_SECONDS = DummyMetric()
 
-CONFIDENCE_INTERVAL_UPPER = Gauge(
-    'cine_score_ci_upper_bound', 
-    'MAPIE 90% Confidence Interval Upper Bound', 
-    ['shot_id', 'dimension']
-)
+import os
+import json
+from datetime import datetime
 
-UNCERTAINTY_WIDTH = Gauge(
-    'cine_uncertainty_interval_width', 
-    'Width of MAPIE Confidence Interval (Uncertainty Index)', 
-    ['shot_id']
-)
+def init_bq_table(*args, **kwargs):
+    # Hijacked to init ClickHouse
+    try:
+        from database.clickhouse_init import init_tables
+        init_tables()
+    except Exception as e:
+        print(f"[ClickHouse] Table init FAILED: {type(e).__name__}: {e}")
 
-# --- Conformal Prediction & Risk Control ---
-CONFORMAL_SET_SIZE_HISTOGRAM = Histogram(
-    'cine_conformal_prediction_set_size',
-    'Size of MAPIE Conformal Prediction Sets (1 = decisive, >1 = ambiguous)',
-    buckets=[1, 2, 3]
-)
-
-UNCERTAIN_VERDICTS_COUNTER = Counter(
-    'cine_uncertain_conformal_verdicts_total',
-    'Verdicts where MAPIE prediction set was multi-class requiring abstention or human review'
-)
-
-# --- Production & Operations Counters ---
-TAKES_TOTAL = Counter(
-    'cine_takes_total', 
-    'Total number of generated takes evaluated', 
-    ['status', 'defect_type']
-)
-
-HUMAN_REVIEWS_TRIGGERED = Counter(
-    'cine_human_reviews_triggered_total', 
-    'Takes escalated to director review due to high uncertainty'
-)
-
-DOLLARS_SAVED_ESTIMATE = Counter(
-    'cine_dollars_saved_total', 
-    'Estimated GPU / API dollars saved via targeted prompt remediation'
-)
-
-# --- Latency & Performance Histograms ---
-INSPECTION_DURATION_SECONDS = Histogram(
-    'cine_inspection_duration_seconds', 
-    'Time spent inspecting and evaluating video alignment',
-    buckets=[0.5, 1.0, 2.0, 5.0, 10.0, 30.0]
-)
-
-REMEDIATION_DURATION_SECONDS = Histogram(
-    'cine_remediation_duration_seconds', 
-    'Time spent generating prompt remediation plan'
-)
+def log_take_to_bq(project_id, dataset_name, table_name, take_data, pass_rate, avg_set_size):
+    # We will ignore this legacy function and rewrite ingestion natively in app.py or a new helper.
+    pass

@@ -1,15 +1,12 @@
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
-from opentelemetry.sdk.resources import Resource
+﻿class DummySpan:
+    def __enter__(self): return self
+    def __exit__(self, *args): pass
+    def set_attribute(self, *args, **kwargs): pass
+    def set_status(self, *args, **kwargs): pass
+    def record_exception(self, *args, **kwargs): pass
 
-import os
+class DummyTracer:
+    def start_as_current_span(self, name, *args, **kwargs):
+        return DummySpan()
 
-resource = Resource.create({"service.name": "cineqa-agent"})
-provider = TracerProvider(resource=resource)
-# For local development, export to console/memory (disabled by default to avoid terminal spam)
-if os.environ.get("DEBUG_TRACING") == "1":
-    provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
-trace.set_tracer_provider(provider)
-
-tracer = trace.get_tracer("cineqa.tracer")
+tracer = DummyTracer()

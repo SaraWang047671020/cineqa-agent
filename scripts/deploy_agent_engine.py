@@ -30,7 +30,7 @@ def deploy_to_vertex_ai():
     requirements = [
         "google-genai>=1.0.0",
         "google-cloud-aiplatform>=1.70.0",
-        "mapie>=0.9.0",
+        "split_conformal_lac>=0.9.0",
         "scikit-learn>=1.4.0",
         "prometheus-client>=0.20.0",
         "opencv-python-headless>=4.9.0",
@@ -47,7 +47,7 @@ def deploy_to_vertex_ai():
             ),
             requirements=requirements,
             display_name="CineQA-Cinema-Observability-Agent",
-            description="Agentic Cinema Quality & Observability Platform powered by Gemini & MAPIE"
+            description="Agentic Cinema Quality & Observability Platform powered by Gemini & Split-Conformal (LAC)"
         )
         print(f"\n[SUCCESS] Agent Engine deployed successfully!")
         print(f"Resource Name: {remote_agent.resource_name}")

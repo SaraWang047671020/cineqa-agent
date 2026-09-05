@@ -30,7 +30,7 @@ CLAIM_SCHEMA = {
                     "type": {
                         "type": "string",
                         "enum": ["count", "direction", "relative_position",
-                                  "relative_size", "color", "state", "action"],
+                                  "relative_size", "color", "state", "action", "style"],
                     },
                     "verifiable": {"type": "boolean"},
                     "temporal": {"type": "string", "enum": ["static", "sequential"]},
@@ -61,17 +61,19 @@ Your task: Distill the director's prompt (which may contain hundreds of words of
 
 ### Strict Rules for Cinematic Saliency & Budget Control:
 1. **STRICT GOLDEN BUDGET**: Extract ONLY **6 to 12 high-impact, decisive claims**. Quality, criticality, and actionable verifiability over raw quantity.
-2. **FILTER OUT UNCHECKABLE RENDER NOISE**:
-   - DO NOT extract abstract style meta-tags (e.g. "8K IMAX", "photorealistic", "no 3D render", "180° shutter", "audio environmental SFX", "pore-level skin", "asymmetric moles").
-   - DO NOT extract camera lens model names unless it describes an observable physical shot framing.
+2. **FILTER OUT UNCHECKABLE RENDER NOISE, BUT RETAIN AESTHETIC STYLE**:
+   - DO NOT extract invisible lore, or micro-textures (e.g. "pore-level skin", "asymmetric moles", "8k resolution").
+   - HOWEVER, you MUST explicitly extract the overarching visual medium/aesthetic (e.g., "3D Pixar style", "Studio Ghibli 2D anime", "photorealistic cinematic live-action") as a `Tier 3` claim with type `style`. This is critical for animation projects!
 3. **CONSOLIDATE FRAGMENTED ATTRIBUTES**:
    - Merge scattered attributes into single coherent entity claims (e.g., "The projectile is a thin cream-grey bone shard dart with a sharp needle point" instead of 4 separate fragments).
 4. **SEMANTIC SAMPLING STRATEGY**:
    - Set `sampling_strategy` to `fast_burst` ONLY IF the action is described with words like "instant", "high-speed", "fraction of a second", or "immediately". Otherwise, use `uniform`.
-5. **4-TIER CRITICAL PATH HIERARCHY**:
+5. **PRESERVE DIRECTIONAL KEYWORDS (CRITICAL)**:
+   - For any directional claims (e.g., 'runs left to right', 'pans up', 'moves horizontally'), you MUST preserve the EXACT directional wording. Do NOT dilute or summarize them into vague words like 'moving' or 'traversing'.
+6. **4-TIER CRITICAL PATH HIERARCHY**:
    - **`tier1_causal_action`**: Core chronological forward timeline (projectile entrance/exit, trigger event, instant physical reaction, wound opening, character clenching).
    - **`tier2_spatial_geometry`**: Strict spatial alignments and framing bounds (e.g., cut passes directly through navel center, face out of frame, left/right bokeh framing).
-   - **`tier3_multimodal_consistency`**: Visual asset alignment with attached concept art / storyboard references (if provided).
+   - **`tier3_multimodal_consistency`**: Visual asset alignment with concept art AND overarching visual style/aesthetic (2D anime, 3D CGI).
    - **`tier4_physics_defect_control`**: Critical physical laws and negative defect suppressions (e.g., continuous non-stop flight, no bone embedded in skin, 24fps normal speed with no slow-mo).
 
 Scene Prompt & Technical Directives:
@@ -95,7 +97,7 @@ def extract_claims(
     location = location or settings.GOOGLE_CLOUD_LOCATION
     model_name = settings.DEFAULT_GEMINI_MODEL
 
-    client = genai.Client(vertexai=True, project=project, location=location)
+    client = settings.get_genai_client()
     
     image_list = []
     if reference_image_paths:
@@ -137,4 +139,15 @@ def extract_claims(
             temperature=0.1
         ),
     )
-    return json.loads(response.text)["claims"]
+    claims = json.loads(response.text)["claims"]
+    
+    physics_claim = {
+        "claim_text": "Universal Physics & Topology Sanity: The video MUST maintain strict topological continuity. Objects must NOT spontaneously appear, vanish, morph, melt (unless explicitly prompted), or pass through solid matter. Characters must retain consistent anatomical structure (no disembodied boots walking alone, no limbs fusing). The background, architecture, and lighting must remain strictly consistent. The environment MUST NOT spontaneously shift, hallucinate new geometry, or change architectural styles mid-shot (e.g. walls changing color/shape, moving from one room type to an entirely different dimension).",
+        "type": "physics_sanity",
+        "verifiable": True,
+        "temporal": "sequential",
+        "tier": "Tier 0 (Foundation)",
+        "reference_source": "system_rule"
+    }
+    claims.insert(0, physics_claim)
+    return claims

@@ -1,7 +1,7 @@
 # CineQA Studio: AI Cinema Verification & Observability Platform 🎬
 
 > **Agentic Cinema Hackathon (Google Cloud & Grafana Labs Track)**
-> An Agentic Quality Control & Observability platform for AI Film Production that eliminates wasted GPU compute and blind re-generation takes using **Google Gemini (Vertex AI)**, **MAPIE (Conformal Prediction)**, and **Grafana Dashboards**.
+> An Agentic Quality Control & Observability platform for AI Film Production that eliminates wasted GPU compute and blind re-generation takes using **Google Gemini (Vertex AI)**, **Split-Conformal (LAC) (Conformal Prediction)**, and **Grafana Dashboards**.
 
 ---
 
@@ -29,7 +29,7 @@
                        └─────────────────────┬─────────────────────┘
                                              │
                        ┌─────────────────────▼─────────────────────┐
-                       │    4. MAPIE 1.5.0 Conformal Risk Engine   │
+                       │    4. Split-Conformal (LAC) Conformal Risk Engine   │
                        │    (90% Coverage Prediction Intervals)    │
                        └─────────────────────┬─────────────────────┘
                                              │
@@ -72,7 +72,7 @@ Import `grafana/dashboards/cineqa_studio_dashboard.json` into your Grafana insta
 
 ## 📊 Tech Stack & Compliance
 * **LLM & Video Reasoning**: Google Gemini 2.5 Flash / Pro (Google Cloud Vertex AI)
-* **Uncertainty Quantification**: MAPIE 1.5.0 (Model Agnostic Prediction Interval Estimator, BSD-3)
+* **Uncertainty Quantification**: Split-Conformal (LAC) (Model Agnostic Prediction Interval Estimator, BSD-3)
 * **Observability & Telemetry**: Grafana Labs, Prometheus, OpenTelemetry
 * **Computer Vision**: OpenCV, FFmpeg-Python
 * **Application Framework**: Streamlit (Python)
