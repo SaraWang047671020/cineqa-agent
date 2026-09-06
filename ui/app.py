@@ -1,7 +1,8 @@
 import sys
 import os
-import time
 import json
+import time
+import tempfile
 from pathlib import Path
 import importlib
 
@@ -11,6 +12,26 @@ if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
 import streamlit as st
+
+# Materialize GCP Service Account JSON credentials from Streamlit Secrets if present
+if "gcp_service_account" in st.secrets and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+    try:
+        key_dict = dict(st.secrets["gcp_service_account"])
+        key_path = os.path.join(tempfile.gettempdir(), "gcp_key.json")
+        with open(key_path, "w") as f:
+            json.dump(key_dict, f)
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = key_path
+    except Exception as _e:
+        print(f"[CineQA] Failed to write gcp_service_account from st.secrets: {_e}")
+
+# Inject ClickHouse, Vertex AI, and other configuration into os.environ for child processes / libraries
+for k in [
+    "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION", "DEFAULT_GEMINI_MODEL",
+    "CLICKHOUSE_HOST", "CLICKHOUSE_PORT", "CLICKHOUSE_USER", "CLICKHOUSE_PASSWORD",
+    "USE_VERTEX_AI", "GEMINI_API_KEY"
+]:
+    if k in st.secrets and not os.environ.get(k):
+        os.environ[k] = str(st.secrets[k])
 
 from config.settings import settings
 from engine.claims import extract_claims

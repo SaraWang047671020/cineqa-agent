@@ -102,6 +102,21 @@ class Settings:
         loc = location_override or self.GOOGLE_CLOUD_LOCATION
 
         sa_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        if not (sa_path and os.path.exists(sa_path)):
+            try:
+                import streamlit as st
+                if hasattr(st, "secrets") and "gcp_service_account" in st.secrets:
+                    import tempfile, json
+                    key_dict = dict(st.secrets["gcp_service_account"])
+                    key_path = os.path.join(tempfile.gettempdir(), "gcp_key.json")
+                    if not os.path.exists(key_path):
+                        with open(key_path, "w") as f:
+                            json.dump(key_dict, f)
+                    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = key_path
+                    sa_path = key_path
+            except Exception:
+                pass
+
         sa_key = _get_secret_val(["GCP_SERVICE_ACCOUNT_KEY", "gcp_service_account_key"])
         has_explicit_sa = bool((sa_path and os.path.exists(sa_path)) or sa_key)
 
