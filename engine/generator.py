@@ -348,7 +348,9 @@ def generate_video(
                     }
 
                     target_interaction_id = interaction_id or previous_interaction_id
-                    if target_interaction_id:
+                    # Google Omni rule: previous_interaction_id is forbidden if generation_config.video_config.task is explicitly set.
+                    # When video task (e.g. edit, reference_to_video) is set, passing source_video in `input` is the official way to fine-tune.
+                    if target_interaction_id and not task:
                         payload["previous_interaction_id"] = target_interaction_id
 
                     endpoint = f"https://aiplatform.googleapis.com/v1beta1/projects/{settings.GOOGLE_CLOUD_PROJECT}/locations/global/interactions"
@@ -364,12 +366,18 @@ def generate_video(
                     if resp.status_code != 200:
                         print(f"Omni API Error: {resp.status_code} - {resp.text}")
                         # Fallback for previous_interaction_id if model preview rejects it on this path
-                        if target_interaction_id and "previous_interaction_id" in resp.text:
+                        if "previous_interaction_id" in resp.text:
                             print("[CineQA Omni] Retrying without previous_interaction_id as standalone edit/generation...")
                             payload.pop("previous_interaction_id", None)
                             resp = omni_session.post(endpoint, headers=headers, json=payload, timeout=(30, 300))
                         if resp.status_code != 200:
-                            resp.raise_for_status()
+                            err_msg = resp.text
+                            try:
+                                err_json = resp.json()
+                                err_msg = err_json.get("error", {}).get("message", resp.text)
+                            except Exception:
+                                pass
+                            raise RuntimeError(f"Omni API Error ({resp.status_code}): {err_msg}")
                         
                     import json
                     resp_data = resp.json()
