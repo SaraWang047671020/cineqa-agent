@@ -120,7 +120,7 @@ def stream_pipeline(
         return entry
 
     completed_count = 0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         future_to_claim = {executor.submit(process_claim, i, c): (i, c) for i, c in enumerate(claims)}
         for future in concurrent.futures.as_completed(future_to_claim):
             entry = future.result()

@@ -278,7 +278,7 @@ def extract_frames(video_path: str, out_dir_str: str, temporal: str, claim_id: s
             return (str(out_path), ts)
         return None
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         futures = [executor.submit(extract_one, i, ts) for i, ts in enumerate(timestamps)]
         for f in futures:
             res = f.result()

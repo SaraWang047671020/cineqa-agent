@@ -876,10 +876,18 @@ with col2:
                         "🎬 Reshoot with Correction (從首幀重新生成 — 推薦：動作、運鏡、物理、實體修正)",
                         "✂️ Surgical In-Place Edit (原片直接微調 — 僅適用：全片色調、微調光影、雨霧氛圍)"
                     ]
+                    # Streamlit session_state radio validation safety:
+                    # If an existing session holds an older string not present in mode_options,
+                    # migrate it or pop it immediately so st.radio does not crash with StreamlitAPIException!
                     if f"pending_tweak_mode_{idx}" in st.session_state:
                         p_mode = st.session_state.pop(f"pending_tweak_mode_{idx}")
                         st.session_state[f"tweak_mode_{idx}"] = (
                             mode_options[1] if p_mode == "tweak" else mode_options[0]
+                        )
+                    elif f"tweak_mode_{idx}" in st.session_state and st.session_state[f"tweak_mode_{idx}"] not in mode_options:
+                        old_v = str(st.session_state.pop(f"tweak_mode_{idx}", ""))
+                        st.session_state[f"tweak_mode_{idx}"] = (
+                            mode_options[1] if ("Surgical" in old_v or "In-Place" in old_v or "微調" in old_v) else mode_options[0]
                         )
 
                     tweak_mode = st.radio(
@@ -1067,18 +1075,24 @@ with col2:
                     
                     # Log to BigQuery (Fire and forget - Truly Async)
                     import threading
+                    curr_take_num = take["take_num"]
+                    curr_ledger = list(take.get("ledger", []))
+                    prev_ledger_snap = st.session_state["take_history"][idx - 1].get("ledger", []) if idx > 0 else []
+                    prev_plan_snap = st.session_state["take_history"][idx - 1].get("remediated_plan") if idx > 0 else None
+                    prev_take_num = st.session_state["take_history"][idx - 1].get("take_num", 1) if idx > 0 else 1
+                    scene_id_val = st.session_state.get("scene_id", "demo_scene_01")
+
                     def _bg_log():
                         try:
                             from database.logger import log_verification_ledger, log_remediation_history_batch
-                            log_verification_ledger(scene_id=st.session_state.get("scene_id", "demo_scene_01"), take_num=take["take_num"], ledger=take.get("ledger", []))
-                            if take["take_num"] > 1:
-                                prev_take = st.session_state["take_history"][idx - 1]
+                            log_verification_ledger(scene_id=scene_id_val, take_num=curr_take_num, ledger=curr_ledger)
+                            if idx > 0 and prev_ledger_snap:
                                 log_remediation_history_batch(
-                                    prev_ledger=prev_take.get("ledger", []),
-                                    curr_ledger=take.get("ledger", []),
-                                    plan=prev_take.get("remediated_plan"),
-                                    take_num_before=prev_take["take_num"],
-                                    take_num_after=take["take_num"],
+                                    prev_ledger=prev_ledger_snap,
+                                    curr_ledger=curr_ledger,
+                                    plan=prev_plan_snap,
+                                    take_num_before=prev_take_num,
+                                    take_num_after=curr_take_num,
                                 )
                         except Exception as e:
                             print(f"[ClickHouse Logger Error]: {e}")
