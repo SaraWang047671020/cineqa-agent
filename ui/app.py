@@ -873,8 +873,8 @@ with col2:
                 st.markdown("##### 💬 Conversational Fine-Tuning")
                 if inter_id:
                     mode_options = [
-                        "🎬 Reshoot with Tweak (Regenerate with correction)",
-                        "✂️ Surgical In-Place Edit (Precise minimal edit)"
+                        "🎬 Reshoot with Correction (從首幀重新生成 — 推薦：動作、運鏡、物理、實體修正)",
+                        "✂️ Surgical In-Place Edit (原片直接微調 — 僅適用：全片色調、微調光影、雨霧氛圍)"
                     ]
                     if f"pending_tweak_mode_{idx}" in st.session_state:
                         p_mode = st.session_state.pop(f"pending_tweak_mode_{idx}")
@@ -889,6 +889,10 @@ with col2:
                         horizontal=True,
                         help="Reshoot creates a new take integrating the correction with the opening first frame anchor. Surgical In-Place Edit applies a precise minimal edit directly onto the source footage."
                     )
+
+                    if tweak_mode.startswith("✂️"):
+                        st.caption("ℹ️ **原片微調 (V2V) 提示**：此模式直接以 Take 1 的 MP4 像素進行局部後製疊加，適合微調光線、雨霧或色調。**AI 影片模型無法在原片像素上重新生成不存在的骨架動作、走位或運鏡**。如需修正角色動作或運鏡，強烈建議選擇「🎬 **Reshoot with Correction**」！")
+
                     col_t1, col_t2 = st.columns([3, 1], vertical_alignment="bottom")
                     with col_t1:
                         # Check if a suggestion was pasted for this input
@@ -906,7 +910,7 @@ with col2:
                     if tweak_btn and tweak_cmd.strip():
                         is_reshoot = tweak_mode.startswith("🎬")
                         spinner_msg = (
-                            f"Omni reshooting Take {take['take_num']} with correction..."
+                            f"Omni reshooting Take {take['take_num']} with correction from First Frame..."
                             if is_reshoot
                             else f"Omni performing precise surgical edit on Take {take['take_num']}..."
                         )
@@ -916,8 +920,10 @@ with col2:
                                 original_scene = st.session_state.get("director_final", st.session_state.get("original_prompt", ""))
                                 
                                 if is_reshoot:
-                                    # Reshoot: ground to storyboard keyframe + inject explicit director correction
+                                    # Reshoot: ground to opening first frame + inject explicit director correction
                                     full_tweak_prompt = (
+                                        f"The attached image is the EXACT FIRST FRAME (Frame 0, starting state) of the video shot. "
+                                        f"Seamlessly animate the cinematic motion and camera forward directly from this starting frame, incorporating the director's correction below:\n\n"
                                         f"{original_scene}\n\n"
                                         f"[DIRECTOR'S CORRECTION FOR THIS TAKE]:\n"
                                         f"{tweak_cmd.strip()}\n\n"
@@ -933,19 +939,13 @@ with col2:
                                         use_live_veo=live_veo
                                     )
                                 else:
-                                    # Surgical V2V edit: precise minimal edit preserving original intent and shot continuity
+                                    # Surgical V2V edit: direct assertive edit directive (no conflicting negative preservation rules)
                                     full_tweak_prompt = (
-                                        f"You are performing a precise, minimal edit on the attached video.\n\n"
-                                        f"ORIGINAL SHOT INTENT (preserve this):\n{original_scene}\n\n"
-                                        f"THE ONLY CHANGE TO MAKE:\n{tweak_cmd.strip()}\n\n"
-                                        f"PRESERVATION RULES — as important as the change itself:\n"
-                                        f"- Keep the same subject, wardrobe, and physical appearance.\n"
-                                        f"- Keep the same camera framing, movement, and shot size.\n"
-                                        f"- Keep the same staging and the timing of the action.\n"
-                                        f"- Keep the same environment, set dressing, and background.\n"
-                                        f"- Change nothing that the instruction above does not explicitly require.\n\n"
-                                        f"Apply the change consistently across the entire clip. "
-                                        f"Do not restyle, re-light, or re-stage anything else."
+                                        f"[MANDATORY VIDEO EDIT INSTRUCTION]:\n"
+                                        f"{tweak_cmd.strip()}\n\n"
+                                        f"[EDIT EXECUTION DIRECTIVE]:\n"
+                                        f"Apply the edit instruction above visibly, clearly, and prominently to the attached video. "
+                                        f"Transform the video footage to noticeably reflect this correction across the clip while maintaining core subject and environment identity."
                                     )
                                     res = generate_video(
                                         prompt=full_tweak_prompt,

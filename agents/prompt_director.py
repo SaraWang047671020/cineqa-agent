@@ -493,6 +493,21 @@ Analyze the verification failures, use the verified real video timestamps (NOT f
                 if re.search(r"00:\d{2}", iss):
                     iss_fixed = re.sub(r'^(At|From|Between)\s+00:\d{2}(\s*[-–to]+\s*00:\d{2})?,?\s*', f"From {primary_window}, ", iss, flags=re.IGNORECASE)
                     sug["issue"] = iss_fixed
+
+            # Enforce fix_mode: Video-to-Video edit CANNOT synthesize new body motion, camera sweeps, or missing objects.
+            act_keywords = [
+                "action", "walk", "run", "jump", "kick", "draw", "hold", "move", "pan", "tilt", "dolly",
+                "zoom", "camera", "disappear", "appear", "vanish", "hand", "arm", "sword", "foot", "leg",
+                "contact", "touch", "body", "pose", "turn", "face", "fall", "climb", "speed", "direction",
+                "discontinuity", "morph", "teleport", "clip"
+            ]
+            text_to_check = (sug.get("issue", "") + " " + sug.get("tweak_instruction", "")).lower()
+            rel_has_action = any(
+                ef.get("claim_type") in ("action", "direction", "relative_position", "relative_size", "count", "physics_sanity", "existence")
+                for ef in enriched_failures if ef.get("claim_id") in rel
+            )
+            if any(kw in text_to_check for kw in act_keywords) or rel_has_action:
+                sug["fix_mode"] = "reshoot"
         return data
     except Exception as e:
         print(f"[PromptDirector] Failed to parse suggest_tweaks response: {e}")
