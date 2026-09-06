@@ -10,19 +10,6 @@ root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
-import engine.storyboard
-import engine.generator
-_ = importlib.reload(engine.storyboard)
-_ = importlib.reload(engine.generator)
-_ = importlib.reload(sys.modules['agents.remediator']) if 'agents.remediator' in sys.modules else None
-_ = importlib.reload(sys.modules['database.logger']) if 'database.logger' in sys.modules else None
-_ = importlib.reload(sys.modules['database.clickhouse_init']) if 'database.clickhouse_init' in sys.modules else None
-_ = importlib.reload(sys.modules['engine.verify']) if 'engine.verify' in sys.modules else None
-_ = importlib.reload(sys.modules['engine.pipeline']) if 'engine.pipeline' in sys.modules else None
-_ = importlib.reload(sys.modules['engine.claims']) if 'engine.claims' in sys.modules else None
-_ = importlib.reload(sys.modules['agents.prompt_director']) if 'agents.prompt_director' in sys.modules else None
-_ = importlib.reload(sys.modules['agents.mcp_client_wrapper']) if 'agents.mcp_client_wrapper' in sys.modules else None
-
 import streamlit as st
 
 from config.settings import settings
@@ -34,14 +21,20 @@ from agents.remediator import PromptRemediatorAgent
 
 st.set_page_config(page_title="CineQA Studio", layout="wide", page_icon="🎬")
 
-from telemetry.metrics import init_bq_table
-try:
-    import google.auth
-    _, project = google.auth.default()
-    if project:
-        init_bq_table(project)
-except Exception:
-    pass
+# Async one-time cloud telemetry & database initialization (Non-blocking background thread)
+if "telemetry_initialized" not in st.session_state:
+    st.session_state["telemetry_initialized"] = True
+    def _bg_init_telemetry():
+        try:
+            from telemetry.metrics import init_bq_table
+            import google.auth
+            _, project = google.auth.default()
+            if project:
+                init_bq_table(project)
+        except Exception:
+            pass
+    import threading
+    threading.Thread(target=_bg_init_telemetry, daemon=True).start()
 
 
 
@@ -688,12 +681,12 @@ with col1:
             st.json(st.session_state.get("director_breakdown", {}))
             
         if st.button("Next: Generate Keyframes", type="primary", use_container_width=True):
-            with st.spinner("Generating 3 candidate keyframes via Gemini Flash Image..."):
+            with st.spinner("Generating 3 candidate keyframes via Gemini Flash Image (parallel)..."):
                 from engine.storyboard import generate_storyboard
-                kfs = []
-                for i in range(3):
-                    res = generate_storyboard(prompt=final_prompt, use_live_imagen=live_veo)
-                    kfs.append(res.get("image_path"))
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=3) as executor:
+                    futures = [executor.submit(generate_storyboard, prompt=final_prompt, use_live_imagen=live_veo) for _ in range(3)]
+                    kfs = [f.result().get("image_path") for f in futures]
                 st.session_state["director_keyframes"] = kfs
                 st.session_state["director_step"] = "keyframe"
                 st.rerun()
@@ -734,12 +727,12 @@ with col1:
         col_b1, col_b2 = st.columns([1, 1])
         with col_b1:
             if st.button("🔄 Regenerate All 3 Candidates", use_container_width=True):
-                with st.spinner("Generating 3 new candidates..."):
+                with st.spinner("Generating 3 new candidates in parallel..."):
                     from engine.storyboard import generate_storyboard
-                    new_kfs = []
-                    for _ in range(3):
-                        res = generate_storyboard(prompt=st.session_state["director_final"], use_live_imagen=live_veo)
-                        new_kfs.append(res.get("image_path"))
+                    from concurrent.futures import ThreadPoolExecutor
+                    with ThreadPoolExecutor(max_workers=3) as executor:
+                        futures = [executor.submit(generate_storyboard, prompt=st.session_state["director_final"], use_live_imagen=live_veo) for _ in range(3)]
+                        new_kfs = [f.result().get("image_path") for f in futures]
                     st.session_state["director_keyframes"] = new_kfs
                     st.rerun()
         with col_b2:
