@@ -326,11 +326,15 @@ def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str
                     "properties": {
                         "issue": {
                             "type": "string",
-                            "description": "Clear explanation of the defect or inconsistency in English."
+                            "description": "Concrete explanation stating EXACTLY what went wrong in the current video (e.g. 'Between 00:01-00:03, the man's trench coat suddenly turns from dark brown to bright blue, and the umbrella in his left hand completely disappears')."
                         },
                         "tweak_instruction": {
                             "type": "string",
-                            "description": "A single concise imperative sentence in English directly instructing Omni on the delta fix (e.g. 'Make the broken hole in the door persist and stay visible as the door swings open')."
+                            "description": "A timestamp-anchored, surgical imperative instruction explicitly telling Omni at which timestamp to change what into what (e.g. 'At 00:01 to 00:03, ensure the man's trench coat remains consistent dark brown and keep the umbrella continuously visible in his left hand')."
+                        },
+                        "timestamp_range": {
+                            "type": "string",
+                            "description": "The exact timing where the defect occurs (e.g. '00:01 - 00:03' or '00:02 - 00:04')."
                         },
                         "related_claims": {
                             "type": "array",
@@ -343,7 +347,7 @@ def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str
                             "description": "Severity of this defect: high (critical physics/action breaks), medium (styling/lighting inconsistency), low (potential intentional choice or minor artifact)."
                         }
                     },
-                    "required": ["issue", "tweak_instruction", "related_claims", "severity"]
+                    "required": ["issue", "tweak_instruction", "timestamp_range", "related_claims", "severity"]
                 }
             }
         },
@@ -353,13 +357,12 @@ def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str
     system_instruction = """You are a senior VFX Supervisor and AI Cinematography Director.
 You evaluate the verification ledger of a generated video take and formulate targeted, conversational tweak suggestions for Gemini Omni.
 
-CRITICAL RULES:
-1. MERGE ROOT-CAUSE ISSUES: Group together failures from physics_sanity and specific state/action claims if they refer to the exact same visual defect. Never output duplicate suggestions.
-2. DELTA-ONLY IMPERATIVE INSTRUCTION: Output exactly ONE concise imperative sentence in English for `tweak_instruction` (e.g. "Make the broken hole in the door persist and stay visible as the door swings open"). DO NOT rewrite the whole prompt. Omni needs an incremental delta instruction.
-3. LANGUAGE: ALL fields (`issue`, `tweak_instruction`, etc.) MUST be strictly in English.
-4. RESPECT DIRECTOR CHOICES: Check `director_choices` (user's deliberate creative decisions). If a verification failure was actually caused by an intentional creative choice (e.g. user chose handheld camera, but verification flagged camera instability), DO NOT generate a fix, or mark it severity: "low" explaining it might be intentional.
-5. SORT BY SEVERITY: Rank high severity (breaking physics, disappearing objects, wrong actions) first, followed by medium and low.
-6. QUANTITY: Provide at most 3 to 4 suggestions. Prefer fewer, highly accurate suggestions over many vague ones.
+CRITICAL INSTRUCTION REQUIREMENTS:
+1. POINT OUT THE EXACT CURRENT MISTAKE: In `issue`, do NOT write vague summaries like "lighting inconsistency" or "action mismatch". You MUST state clearly what the current video did wrong based on the ledger's `observed` and `frame_observations` (e.g., "From t=01s to t=03s, the character's face morphs and the coffee cup vanishes upon touch").
+2. EXPLICIT TIMESTAMP-ANCHORED TWEAK DIRECTIVE: In `tweak_instruction`, you MUST specify the exact timing (e.g., "At 00:01-00:03...") and provide a precise, literal physical change (e.g., "At 00:02-00:04, keep the coffee cup solid on the wooden table and show the right hand firmly gripping its handle without clipping or dissolving"). Avoid vague buzzwords like "improve quality", "fix glitch", or "make it more realistic". State the exact subject, position, and physical interaction.
+3. LANGUAGE: All output MUST be strictly in clear English.
+4. RESPECT INTENTIONAL CHOICES: Cross-reference `director_choices`. Do not flag intentional stylistic or camera choices as defects unless they violate fundamental continuity or physics.
+5. LIMIT & DEDUPLICATE: Merge related root causes. Provide 1 to 4 distinct, high-impact suggestions, sorted by severity.
 """
 
     prompt_content = f"""Final Shot Prompt: {final_prompt}
@@ -370,7 +373,7 @@ Director's Prior Guided Choices:
 Verification Ledger:
 {json.dumps(ledger or [], ensure_ascii=False, indent=2)}
 
-Analyze the verification failures, deduplicate root causes, and produce 1-4 targeted conversational tweak instructions."""
+Analyze the verification failures, identify the exact timestamps and visible defects from the ledger's frame observations, and produce 1-4 timestamp-anchored, surgical tweak instructions."""
 
     def _execute():
         return client.models.generate_content(

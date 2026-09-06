@@ -1068,9 +1068,11 @@ with col2:
                             with st.container(border=True):
                                 col_sug_text, col_sug_btn = st.columns([3, 1], vertical_alignment="center")
                                 with col_sug_text:
-                                    st.markdown(f"**Issue**: {sug.get('issue', '')} &nbsp; `{severity_badge}`")
+                                    ts_badge = f"⏱️ `{sug.get('timestamp_range', 'Whole Clip')}`"
+                                    st.markdown(f"**⚠️ Current Defect:** {sug.get('issue', '')} &nbsp; {ts_badge} &nbsp; `{severity_badge}`")
                                     if sug.get("related_claims"):
                                         st.caption(f"Related claims: {', '.join(sug.get('related_claims', []))}")
+                                    st.markdown("**🎯 Surgical Tweak Directive:**")
                                     st.code(tweak_text, language="text")
                                 with col_sug_btn:
                                     if already_in_box:
