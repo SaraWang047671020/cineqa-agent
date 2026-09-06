@@ -33,6 +33,23 @@ for k in [
     if k in st.secrets and not os.environ.get(k):
         os.environ[k] = str(st.secrets[k])
 
+# --- TEMP DIAGNOSTIC: 確認 secrets 有沒有被讀到 ---
+_cred = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+_diag = {
+    "secrets_top_level_keys": list(st.secrets.keys()) if hasattr(st, "secrets") else [],
+    "has_gcp_service_account": ("gcp_service_account" in st.secrets) if hasattr(st, "secrets") else False,
+    "GOOGLE_APPLICATION_CREDENTIALS": _cred,
+    "key_file_exists": os.path.exists(_cred) if _cred else False,
+    "GOOGLE_CLOUD_PROJECT": os.environ.get("GOOGLE_CLOUD_PROJECT"),
+}
+if _cred and os.path.exists(_cred):
+    try:
+        with open(_cred) as _f:
+            _diag["client_email"] = json.load(_f).get("client_email")
+    except Exception as _e:
+        _diag["key_file_error"] = str(_e)
+# --- END DIAGNOSTIC ---
+
 from config.settings import settings
 from engine.claims import extract_claims
 from telemetry.metrics import TAKES_TOTAL, INSPECTION_DURATION_SECONDS, HUMAN_REVIEWS_TRIGGERED
@@ -41,6 +58,9 @@ from engine.generator import generate_video
 from agents.remediator import PromptRemediatorAgent
 
 st.set_page_config(page_title="CineQA Studio", layout="wide", page_icon="🎬")
+
+# Display diagnostic block at top of UI
+st.warning(_diag)
 
 # Async one-time cloud telemetry & database initialization (Non-blocking background thread)
 if "telemetry_initialized" not in st.session_state:
