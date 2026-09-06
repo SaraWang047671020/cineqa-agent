@@ -831,7 +831,8 @@ with col1:
                         "ledger": None,
                         "remediated_plan": None,
                         "seed": gen_res.get("seed_used"),
-                        "interaction_id": gen_res.get("interaction_id")
+                        "interaction_id": gen_res.get("interaction_id"),
+                        "duration": vid_duration
                     })
                     st.session_state["original_prompt"] = st.session_state["director_final"]
                     
@@ -917,7 +918,7 @@ with col2:
 
                     if tweak_btn and tweak_cmd.strip():
                         from agents.prompt_director import clean_timestamp_string
-                        clean_cmd = clean_timestamp_string(tweak_cmd.strip())
+                        clean_cmd = clean_timestamp_string(tweak_cmd.strip(), duration=vid_duration)
                         is_reshoot = tweak_mode.startswith("🎬")
                         spinner_msg = (
                             f"Omni reshooting Take {take['take_num']} with correction from First Frame..."
@@ -973,7 +974,8 @@ with col2:
                                     "ledger": None,
                                     "remediated_plan": None,
                                     "seed": res.get("seed_used"),
-                                    "interaction_id": res.get("interaction_id")
+                                    "interaction_id": res.get("interaction_id"),
+                                    "duration": vid_duration
                                 })
                                 
                                 # If this tweak originated from a pasted suggestion, mark was_applied
@@ -1117,6 +1119,7 @@ with col2:
                 # --- Suggest Tweaks Block (Delta-driven Tweak Recommendations) ---
                 failed_items = [r for r in take["ledger"] if r.get("verdict") in ("MISMATCH", "CANNOT_DETERMINE")]
                 if failed_items:
+                    take_dur = float(take.get("duration", vid_duration) or 4.0)
                     # Auto-generate suggestions if not already generated for this take
                     if "tweak_suggestions" not in take:
                         with st.spinner("Analyzing verification ledger and synthesizing tweak recommendations..."):
@@ -1128,15 +1131,16 @@ with col2:
                                 res_sug = suggest_tweaks(
                                     ledger=take["ledger"],
                                     director_choices=choices_dict,
-                                    final_prompt=take.get("prompt", "")
+                                    final_prompt=take.get("prompt", ""),
+                                    video_duration=take_dur
                                 )
                                 raw_sug = res_sug.get("suggestions", [])
                                 import uuid
                                 for s in raw_sug:
                                     s["suggestion_id"] = str(uuid.uuid4())[:8]
-                                    s["issue"] = clean_timestamp_string(s.get("issue", ""))
-                                    s["tweak_instruction"] = clean_timestamp_string(s.get("tweak_instruction", ""))
-                                    s["timestamp_range"] = clean_timestamp_string(str(s.get("timestamp_range", "0.0s - 4.0s (Whole Clip)")))
+                                    s["issue"] = clean_timestamp_string(s.get("issue", ""), duration=take_dur)
+                                    s["tweak_instruction"] = clean_timestamp_string(s.get("tweak_instruction", ""), duration=take_dur)
+                                    s["timestamp_range"] = clean_timestamp_string(str(s.get("timestamp_range", f"0.0s - {take_dur:.1f}s (Whole Clip)")), duration=take_dur)
                                 take["tweak_suggestions"] = raw_sug
 
                                 # Optional ClickHouse Logging
@@ -1166,7 +1170,7 @@ with col2:
                             if len(sugs) > 1:
                                 if st.button("📋 Paste All Suggestions", key=f"paste_all_{idx}", use_container_width=True):
                                     from agents.prompt_director import clean_timestamp_string
-                                    all_instructions = [clean_timestamp_string(s.get("tweak_instruction", "")).strip() for s in sugs if s.get("tweak_instruction")]
+                                    all_instructions = [clean_timestamp_string(s.get("tweak_instruction", ""), duration=take_dur).strip() for s in sugs if s.get("tweak_instruction")]
                                     st.session_state[f"pending_tweak_input_{idx}"] = "; ".join(all_instructions)
                                     # If any suggestion requires reshoot, set mode to reshoot
                                     has_reshoot = any(s.get("fix_mode") == "reshoot" for s in sugs)
@@ -1200,15 +1204,15 @@ with col2:
                             else:
                                 mode_badge = "✂️ **Recommended Mode: Surgical Edit** (Incremental fix — suitable for direct V2V edit on existing footage)"
 
-                            tweak_text = clean_timestamp_string(sug.get("tweak_instruction", "").strip())
+                            tweak_text = clean_timestamp_string(sug.get("tweak_instruction", "").strip(), duration=take_dur)
                             already_in_box = tweak_text in current_box_text if current_box_text else False
 
                             with st.container(border=True):
                                 col_sug_text, col_sug_btn = st.columns([3, 1], vertical_alignment="center")
                                 with col_sug_text:
-                                    cleaned_ts = clean_timestamp_string(str(sug.get('timestamp_range', '0.0s - 4.0s (Whole Clip)')))
+                                    cleaned_ts = clean_timestamp_string(str(sug.get('timestamp_range', f"0.0s - {take_dur:.1f}s (Whole Clip)")), duration=take_dur)
                                     ts_badge = f"⏱️ `{cleaned_ts}`"
-                                    cleaned_issue = clean_timestamp_string(sug.get('issue', ''))
+                                    cleaned_issue = clean_timestamp_string(sug.get('issue', ''), duration=take_dur)
                                     st.markdown(f"**⚠️ Current Defect:** {cleaned_issue} &nbsp; {ts_badge} &nbsp; `{severity_badge}`")
                                     st.caption(mode_badge)
                                     if sug.get("related_claims"):
@@ -1265,7 +1269,8 @@ with col2:
                                     "video_path": res["video_path"],
                                     "ledger": None,
                                     "remediated_plan": None,
-                                    "interaction_id": res.get("interaction_id")
+                                    "interaction_id": res.get("interaction_id"),
+                                    "duration": vid_duration
                                 })
                                 st.rerun()
                             except Exception as e:

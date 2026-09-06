@@ -311,18 +311,202 @@ Do not just concatenate; rewrite smoothly. ALL output in this step MUST be in En
     response = _call_with_retry(_execute)
     return json.loads(response.text)
 
-def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str) -> dict:
+def clean_timestamp_string(text: str, total_frames: int = None, duration: float = 4.0) -> str:
+    """
+    Deterministically replaces hallucinated or MM:SS formatted timestamps (e.g. '00:18', '00:02', 
+    '00:00 to 00:18', 'Frame 0 to Frame 17', '18 seconds') with physical real-video elapsed seconds (0.0s - duration).
+    Guarantees no timestamps > duration and no '00:XX' strings survive.
+    Dynamically supports any video duration (3s - 10s).
+    """
+    import re
+    if not text or not isinstance(text, str):
+        return text
+
+    duration = float(duration or 4.0)
+    if total_frames is None:
+        total_frames = max(5, min(20, int(round(duration / 0.20))))
+
+    fps_frame_duration = duration / float(max(1, total_frames))
+
+    def _frame_to_sec(f_num: int) -> float:
+        if f_num >= total_frames - 2:
+            return duration
+        return round(min(duration, f_num * fps_frame_duration), 1)
+
+    # 1. Full clip range patterns like 00:00 to 00:18, 00:00 to 00:05, 00:00-00:10
+    def _replace_full_clip(prefix: str) -> str:
+        prefix = (prefix or "").strip()
+        if prefix.lower() in ("from", "between"):
+            return f"{prefix} 0.0s to {duration:.1f}s (throughout the clip)"
+        elif prefix.lower() == "at":
+            return f"Throughout the {duration:.0f}-second clip (0.0s to {duration:.1f}s)"
+        elif prefix:
+            return f"{prefix} 0.0s - {duration:.1f}s"
+        else:
+            return f"0.0s - {duration:.1f}s (Whole Clip)"
+
+    def _check_full_clip(m):
+        prefix = (m.group(1) or "").strip()
+        n2 = int(m.group(2))
+        is_end = (n2 >= int(round(duration)) and abs(n2 - duration) <= 1) or (n2 >= min(15, total_frames - 2))
+        if is_end:
+            return _replace_full_clip(prefix)
+        else:
+            t2 = n2 if n2 <= duration else _frame_to_sec(n2)
+            p_str = f"{prefix} " if prefix else ""
+            return f"{p_str}0.0s to {t2:.1f}s"
+
+    text = re.sub(
+        r'\b(From|Between|At)?\s*00:00\s*(?:[-–—~to/]+|\s+to\s+)\s*00:(\d{2})\b',
+        _check_full_clip,
+        text,
+        flags=re.IGNORECASE
+    )
+
+    # 2. General 00:XX to 00:YY ranges (e.g. 00:02 to 00:05)
+    def _replace_mm_ss_range(m):
+        prefix = (m.group(1) or "").strip()
+        n1 = int(m.group(2))
+        n2 = int(m.group(3))
+        t1 = n1 if n1 <= duration else _frame_to_sec(n1)
+        t2 = n2 if n2 <= duration else _frame_to_sec(n2)
+        if t1 >= t2:
+            t2 = min(duration, round(t1 + 0.4, 1))
+        p_str = f"{prefix} " if prefix else ""
+        return f"{p_str}{t1:.1f}s to {t2:.1f}s"
+
+    text = re.sub(
+        r'\b(From|Between|At)?\s*00:(\d{2})\s*(?:[-–—~to/]+|\s+to\s+)\s*00:(\d{2})\b',
+        _replace_mm_ss_range,
+        text,
+        flags=re.IGNORECASE
+    )
+
+    # 3. Explicit Frame ranges in parentheses: (Frame 0-17), (Frame 0 to 18), (0 to 17)
+    def _replace_frame_paren(m):
+        n1 = int(m.group(1))
+        n2 = int(m.group(2))
+        if n1 == 0 and n2 >= total_frames - 3:
+            return f"(0.0s - {duration:.1f}s)"
+        t1 = _frame_to_sec(n1)
+        t2 = _frame_to_sec(n2)
+        if t1 >= t2:
+            t2 = min(duration, round(t1 + 0.4, 1))
+        return f"({t1:.1f}s - {t2:.1f}s)"
+
+    text = re.sub(
+        r'\((?:Frame\s*)?(\d+)\s*(?:[-–—~to/]+|\s+to\s+)\s*(?:Frame\s*)?(\d+)\)',
+        _replace_frame_paren,
+        text,
+        flags=re.IGNORECASE
+    )
+
+    # 3b. Inline Frame ranges: Frame 0 to Frame 2, during Frame 0-3
+    def _replace_frame_inline(m):
+        prefix = (m.group(1) or "").strip()
+        n1 = int(m.group(2))
+        n2 = int(m.group(3))
+        if n1 == 0 and n2 >= total_frames - 3:
+            return f"throughout the entire clip (0.0s to {duration:.1f}s)"
+        t1 = _frame_to_sec(n1)
+        t2 = _frame_to_sec(n2)
+        if t1 >= t2:
+            t2 = min(duration, round(t1 + 0.4, 1))
+        p_str = f"{prefix} " if prefix else "from "
+        return f"{p_str}{t1:.1f}s to {t2:.1f}s"
+
+    text = re.sub(
+        r'\b(from|between|at|in|during)?\s*Frame\s*(\d+)\s*(?:[-–—~to/]+|\s+to\s+)\s*(?:Frame\s*)?(\d+)\b',
+        _replace_frame_inline,
+        text,
+        flags=re.IGNORECASE
+    )
+
+    # 3c. Standalone Frame X (e.g. at Frame 2 -> at t=0.4s)
+    def _replace_single_frame(m):
+        prefix = (m.group(1) or "").strip()
+        n = int(m.group(2))
+        t = _frame_to_sec(n)
+        p_str = f"{prefix} " if prefix else "at "
+        return f"{p_str}t={t:.1f}s"
+
+    text = re.sub(
+        r'\b(at|on|in|from)?\s*Frame\s*(\d+)\b',
+        _replace_single_frame,
+        text,
+        flags=re.IGNORECASE
+    )
+
+    # 4. Standalone single 00:XX (e.g. At 00:02, 00:18)
+    def _replace_single_mm_ss(m):
+        prefix = (m.group(1) or "").strip()
+        n = int(m.group(2))
+        t = n if n <= duration else _frame_to_sec(n)
+        if prefix:
+            return f"{prefix} t={t:.1f}s"
+        return f"t={t:.1f}s"
+
+    text = re.sub(
+        r'\b(At|Around|By)?\s*00:(\d{2})\b',
+        _replace_single_mm_ss,
+        text,
+        flags=re.IGNORECASE
+    )
+
+    # 5. Hallucinated seconds > duration (e.g. "18 seconds" in an 8s clip)
+    def _replace_hallucinated_seconds(m):
+        n = int(m.group(1))
+        unit = m.group(2)
+        if n > duration:
+            t = _frame_to_sec(n)
+            return f"{t:.1f} seconds"
+        return m.group(0)
+
+    text = re.sub(
+        r'\b(\d+)\s*(seconds|second|secs|sec)\b',
+        _replace_hallucinated_seconds,
+        text,
+        flags=re.IGNORECASE
+    )
+
+    # 6. Any stray "00:XX" remaining anywhere in the string
+    def _replace_stray_mm_ss(m):
+        n = int(m.group(1))
+        t = n if n <= duration else _frame_to_sec(n)
+        return f"{t:.1f}s"
+
+    text = re.sub(r'00:(\d{2})', _replace_stray_mm_ss, text)
+
+    # Clean up any leftover double spaces or awkward punctuation
+    text = re.sub(r'\s{2,}', ' ', text)
+    text = re.sub(r'\(\s*\)', '', text)
+    return text.strip()
+
+def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str, video_duration: float = None) -> dict:
     """
     Analyzes the entire verification ledger to produce deduplicated, prioritized
     conversational tweak suggestions for Gemini Omni video incremental editing.
     Ensures all timings reflect real video elapsed seconds (e.g. 0.4s - 1.2s),
-    never confusing sampled frame indices (e.g. Frame 1, Frame 2) with seconds.
+    calibrated dynamically to the video duration (3s - 10s).
     """
     failed_claims = [e for e in (ledger or []) if e.get("verdict") in ("MISMATCH", "CANNOT_DETERMINE")]
     if not failed_claims:
         return {"suggestions": []}
 
     model = settings.DEFAULT_GEMINI_MODEL
+
+    # Dynamic video duration auto-detection from parameter or ledger frame timestamps
+    duration = float(video_duration) if video_duration else None
+    if duration is None and ledger:
+        all_ts = [ts for entry in ledger for ts in entry.get("frame_timestamps", []) if isinstance(ts, (int, float))]
+        if all_ts:
+            max_ts = max(all_ts)
+            duration = round(max_ts) if abs(round(max_ts) - max_ts) < 0.25 else round(max_ts, 1)
+    if not duration or duration < 1.0:
+        duration = 4.0
+
+    all_lens = [len(entry.get("frame_timestamps", [])) for entry in (ledger or []) if entry.get("frame_timestamps")]
+    total_frames = max(all_lens) if all_lens else max(5, min(20, int(round(duration / 0.20))))
 
     enriched_failures = []
     for fc in failed_claims:
@@ -338,12 +522,13 @@ def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str
                     min_t, max_t = min(ts_list), max(ts_list)
                     defect_window = f"t={min_t:.1f}s" if abs(max_t - min_t) < 0.15 else f"{min_t:.1f}s - {max_t:.1f}s"
             elif indices:
-                est_ts = [round(i * 0.2, 2) for i in indices]
+                step_est = duration / float(max(1, total_frames))
+                est_ts = [round(i * step_est, 2) for i in indices]
                 defect_ts = est_ts
                 min_t, max_t = min(est_ts), max(est_ts)
                 defect_window = f"t={min_t:.1f}s" if abs(max_t - min_t) < 0.15 else f"{min_t:.1f}s - {max_t:.1f}s"
             else:
-                defect_window = "Whole Clip"
+                defect_window = f"0.0s - {duration:.1f}s (Whole Clip)"
 
         frame_details = []
         if indices and defect_ts and len(indices) == len(defect_ts):
@@ -351,11 +536,11 @@ def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str
         elif indices:
             frame_details = [f"Sampled Frame {idx}" for idx in indices]
 
-        obs_defect = clean_timestamp_string(fc.get("observed", ""))
-        frame_obs = clean_timestamp_string(fc.get("frame_observations", ""))
-        phys_sanity = clean_timestamp_string(fc.get("physics_sanity", ""))
-        mot_anchoring = clean_timestamp_string(fc.get("motion_anchoring", ""))
-        causal = clean_timestamp_string(fc.get("causality", ""))
+        obs_defect = clean_timestamp_string(fc.get("observed", ""), total_frames=total_frames, duration=duration)
+        frame_obs = clean_timestamp_string(fc.get("frame_observations", ""), total_frames=total_frames, duration=duration)
+        phys_sanity = clean_timestamp_string(fc.get("physics_sanity", ""), total_frames=total_frames, duration=duration)
+        mot_anchoring = clean_timestamp_string(fc.get("motion_anchoring", ""), total_frames=total_frames, duration=duration)
+        causal = clean_timestamp_string(fc.get("causality", ""), total_frames=total_frames, duration=duration)
 
         enriched_failures.append({
             "claim_id": fc.get("claim_id", ""),
@@ -382,27 +567,27 @@ def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str
                     "properties": {
                         "issue": {
                             "type": "string",
-                            "description": "Concrete explanation stating EXACTLY what went wrong in the current video using real video seconds. NEVER use 00:XX or frame numbers."
+                            "description": f"Concrete explanation stating EXACTLY what went wrong in the current video using real video seconds (0.0s to {duration:.1f}s). NEVER use 00:XX or frame numbers."
                         },
                         "tweak_instruction": {
                             "type": "string",
-                            "description": "Timestamp-anchored, surgical imperative instruction telling Omni at which real video elapsed timing to change what into what. Format in float seconds (e.g. '0.4s - 1.2s'). NEVER use 00:XX or frame indices."
+                            "description": f"Timestamp-anchored, surgical imperative instruction telling Omni at which real video elapsed timing to change what into what. Format in float seconds (e.g. '0.4s - {min(duration, 1.2):.1f}s'). NEVER use 00:XX or frame indices."
                         },
                         "timestamp_range": {
                             "type": "string",
-                            "description": "The exact timing in real video elapsed seconds. NEVER use frame indices or 00:XX."
+                            "description": f"The exact timing in real video elapsed seconds (0.0s to {duration:.1f}s). NEVER use frame indices or 00:XX."
                         },
                         "related_claims": {
                             "type": "array",
-                            "items": {"type": "string"},
+                            "items": {"type": "string"}
                         },
                         "severity": {
                             "type": "string",
-                            "enum": ["high", "medium", "low"],
+                            "enum": ["high", "medium", "low"]
                         },
                         "fix_mode": {
                             "type": "string",
-                            "enum": ["tweak", "reshoot"],
+                            "enum": ["tweak", "reshoot"]
                         }
                     },
                     "required": ["issue", "tweak_instruction", "timestamp_range", "related_claims", "severity", "fix_mode"]
@@ -412,21 +597,21 @@ def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str
         "required": ["suggestions"]
     }
 
-    system_instruction = """You are a senior VFX Supervisor and AI Cinematography Director.
+    system_instruction = f"""You are a senior VFX Supervisor and AI Cinematography Director.
 You evaluate the verification ledger of a generated video take and formulate targeted, conversational tweak suggestions for Gemini Omni.
 
-CRITICAL REAL-TIME TIMESTAMP DIRECTIVE (ABSOLUTE PROHIBITION ON 00:XX AND TIMESTAMPS > 4.0s):
-- The generated video is strictly 4.0 seconds long. Any timestamp above 4.0s does NOT exist.
+CRITICAL REAL-TIME TIMESTAMP DIRECTIVE (ABSOLUTE PROHIBITION ON 00:XX AND TIMESTAMPS > {duration:.1f}s):
+- The generated video is strictly {duration:.1f} seconds long (0.0s to {duration:.1f}s). Any timestamp above {duration:.1f}s does NOT exist.
 - ABSOLUTELY NEVER use "00:XX" format (e.g., NEVER write "00:01", "00:02", "00:18", "00:17").
-- Frame numbers (e.g. Frame 1, Frame 2, Frame 5, Frame 17) ARE NOT SECONDS!
-  In our pipeline, frames are sampled densely (~4.5-5 frames per second). Frame 0 is 0.0s, Frame 2 is 0.4s, Frame 17/18 is 4.0s.
-  NEVER write "00:18" or "18 seconds" for Frame 18!
+- Frame numbers (e.g. Frame 1, Frame 2, Frame 5) ARE NOT SECONDS!
+  In our pipeline, frames are sampled densely across the {duration:.1f}-second video.
+  NEVER write "00:18" or "18 seconds" if 18 frames were sampled!
 - Express all timings strictly in float seconds:
-  * For full-clip defects: write "From 0.0s to 4.0s (throughout the 4-second clip)" or "Throughout the clip (0.0s - 4.0s)", and for timestamp_range use "0.0s - 4.0s (Whole Clip)".
-  * For specific moments: write "From 0.0s to 0.4s", "Between 0.4s and 1.2s", "At t=0.8s".
+  * For full-clip defects: write "From 0.0s to {duration:.1f}s (throughout the {duration:.0f}-second clip)" or "Throughout the clip (0.0s - {duration:.1f}s)", and for timestamp_range use "0.0s - {duration:.1f}s (Whole Clip)".
+  * For specific moments: write "From 0.0s to 0.4s", "Between 1.2s and {min(duration, 2.5):.1f}s", "At t=0.8s".
 
 CRITICAL INSTRUCTION REQUIREMENTS:
-1. POINT OUT THE EXACT CURRENT MISTAKE: In `issue`, do NOT write vague summaries. You MUST state clearly what the current video did wrong using real video elapsed seconds.
+1. POINT OUT THE EXACT CURRENT MISTAKE: In `issue`, do NOT write vague summaries. You MUST state clearly what the current video did wrong using real video elapsed seconds (0.0s - {duration:.1f}s).
 2. EXPLICIT TIMESTAMP-ANCHORED TWEAK DIRECTIVE: In `tweak_instruction`, specify the real video second timing (e.g., "From 0.4s to 1.2s...") and provide a precise, literal physical change. Avoid vague buzzwords.
 3. CONCRETE AND SPECIFIC: Provide exact, actionable physical parameters.
 4. CHOOSE THE PROPER FIX MODE (`fix_mode`):
@@ -442,7 +627,7 @@ CRITICAL INSTRUCTION REQUIREMENTS:
 Director's Prior Guided Choices:
 {json.dumps(director_choices or {}, ensure_ascii=False, indent=2)}
 
-Verification Failure Items (with Verified Real-Time Timestamps):
+Verification Failure Items (with Verified Real-Time Timestamps across {duration:.1f}s video):
 {json.dumps(enriched_failures, ensure_ascii=False, indent=2)}
 
 Analyze the verification failures, use the verified real video timestamps (NOT frame indices) and visible defects from the ledger's frame observations, and produce 1-4 timestamp-anchored, surgical tweak instructions."""
@@ -465,9 +650,9 @@ Analyze the verification failures, use the verified real video timestamps (NOT f
     try:
         data = json.loads(response.text)
         for sug in data.get("suggestions", []):
-            sug["issue"] = clean_timestamp_string(sug.get("issue", ""))
-            sug["tweak_instruction"] = clean_timestamp_string(sug.get("tweak_instruction", ""))
-            ts_range = clean_timestamp_string(str(sug.get("timestamp_range", "")).strip())
+            sug["issue"] = clean_timestamp_string(sug.get("issue", ""), total_frames=total_frames, duration=duration)
+            sug["tweak_instruction"] = clean_timestamp_string(sug.get("tweak_instruction", ""), total_frames=total_frames, duration=duration)
+            ts_range = clean_timestamp_string(str(sug.get("timestamp_range", "")).strip(), total_frames=total_frames, duration=duration)
 
             rel = sug.get("related_claims", [])
             matched_windows = [
@@ -478,14 +663,14 @@ Analyze the verification failures, use the verified real video timestamps (NOT f
             ]
             primary_window = matched_windows[0] if matched_windows else (enriched_failures[0]["real_defect_video_timestamp"] if enriched_failures else "")
 
-            if primary_window and primary_window != "Whole Clip":
-                if not ts_range or "whole clip" in ts_range.lower() or "0.0s - 4.0s" in ts_range:
+            if primary_window and primary_window != "Whole Clip" and "Whole Clip" not in primary_window:
+                if not ts_range or "whole clip" in ts_range.lower() or f"{duration:.1f}s" in ts_range:
                     sug["timestamp_range"] = primary_window
                 else:
                     sug["timestamp_range"] = ts_range
             else:
-                if not ts_range or ts_range == "Whole Clip":
-                    sug["timestamp_range"] = "0.0s - 4.0s (Whole Clip)"
+                if not ts_range or "Whole Clip" in ts_range:
+                    sug["timestamp_range"] = f"0.0s - {duration:.1f}s (Whole Clip)"
                 else:
                     sug["timestamp_range"] = ts_range
 
