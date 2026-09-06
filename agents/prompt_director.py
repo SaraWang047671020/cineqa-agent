@@ -11,6 +11,14 @@ def _call_with_retry(func, max_retries: int = 3, delay: float = 1.5):
         except Exception as e:
             last_err = e
             err_msg = str(e).lower()
+            if "metadata.google.internal" in err_msg or "computemetadata" in err_msg:
+                # GCE metadata server unreachable (e.g. running on Streamlit Cloud or external container)
+                print(f"[PromptDirector] GCE metadata server unreachable: {e}. Forcing fallback to GEMINI_API_KEY...")
+                settings.USE_VERTEX_AI = False
+                settings._clients.clear()
+                if attempt < max_retries - 1:
+                    time.sleep(0.5)
+                    continue
             is_transient = any(k in err_msg for k in ["transport", "nameresolutionerror", "11001", "getaddrinfo", "timeout", "connection", "remotedisconnected", "temporarily unavailable"])
             if attempt < max_retries - 1 and is_transient:
                 print(f"[PromptDirector] Transient network/DNS issue encountered ({e}), retrying in {delay}s (attempt {attempt+1}/{max_retries})...")
@@ -25,7 +33,6 @@ def next_question(
     max_questions: int = 4,
     priority_hint: list[str] = None
 ) -> dict:
-    client = settings.get_genai_client()
     model = settings.DEFAULT_GEMINI_MODEL
     
     schema = {
@@ -210,6 +217,7 @@ You have access to `get_axis_priority(scene_summary)`, which returns historical 
     use_tools = (len(answered) == 0)
 
     def _execute():
+        client = settings.get_genai_client()
         if use_tools:
             from agents.mcp_client_wrapper import get_axis_priority
             chat = client.chats.create(
@@ -252,7 +260,6 @@ You have access to `get_axis_priority(scene_summary)`, which returns historical 
     return json.loads(response.text)
 
 def assemble_prompt(user_prompt: str, choices: dict) -> dict:
-    client = settings.get_genai_client()
     model = settings.DEFAULT_GEMINI_MODEL
     
     schema = {
@@ -290,6 +297,7 @@ Do not just concatenate; rewrite smoothly. ALL output in this step MUST be in En
     contents = f"Original Prompt: {user_prompt}\nChosen Additions:\n{choices_str}\n\nAssemble the final prompt."
     
     def _execute():
+        client = settings.get_genai_client()
         return client.models.generate_content(
             model=model,
             contents=[contents],
@@ -313,7 +321,6 @@ def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str
     if not failed_claims:
         return {"suggestions": []}
 
-    client = settings.get_genai_client()
     model = settings.DEFAULT_GEMINI_MODEL
 
     schema = {
@@ -385,6 +392,7 @@ Verification Ledger:
 Analyze the verification failures, identify the exact timestamps and visible defects from the ledger's frame observations, and produce 1-4 timestamp-anchored, surgical tweak instructions."""
 
     def _execute():
+        client = settings.get_genai_client()
         return client.models.generate_content(
             model=model,
             contents=[prompt_content],
@@ -407,7 +415,6 @@ Analyze the verification failures, identify the exact timestamps and visible def
 def infer_tweak_axis(tweak_text: str) -> tuple[str, float]:
     """Classifies a user's tweak instruction into one of the 5 creative dimensions with a confidence score."""
     try:
-        client = settings.get_genai_client()
         model = settings.DEFAULT_GEMINI_MODEL
         schema = {
             "type": "object",
@@ -433,6 +440,7 @@ def infer_tweak_axis(tweak_text: str) -> tuple[str, float]:
 If the instruction is ambiguous, too vague, purely subjective, or spans multiple dimensions (e.g. 'it feels weird', 'fix this', 'change everything'), assign a confidence score below 0.6.
 """
         def _execute():
+            client = settings.get_genai_client()
             return client.models.generate_content(
                 model=model,
                 contents=[f"Tweak instruction: {tweak_text}"],

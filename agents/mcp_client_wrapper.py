@@ -8,6 +8,8 @@ def search_clickhouse_memory(claim_type: str) -> str:
     """Search the historical database via MCP for how similar video generation flaws were successfully fixed."""
     async def _query():
         server_script = os.path.join(os.path.dirname(__file__), "..", "mcp_server.py")
+        if not os.path.exists(server_script):
+            return "No historical remediation memory found. Proceed with standard analysis."
         server_params = StdioServerParameters(
             command=sys.executable,
             args=[server_script],
@@ -29,6 +31,8 @@ def get_axis_priority(scene_summary: str) -> str:
     """Query which creative dimensions historically need to be asked about first."""
     async def _query():
         server_script = os.path.join(os.path.dirname(__file__), "..", "mcp_server.py")
+        if not os.path.exists(server_script):
+            return "MCP server offline. Using default creative dimension priority."
         server_params = StdioServerParameters(
             command=sys.executable,
             args=[server_script],
