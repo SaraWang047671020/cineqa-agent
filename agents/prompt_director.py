@@ -360,9 +360,10 @@ You evaluate the verification ledger of a generated video take and formulate tar
 CRITICAL INSTRUCTION REQUIREMENTS:
 1. POINT OUT THE EXACT CURRENT MISTAKE: In `issue`, do NOT write vague summaries like "lighting inconsistency" or "action mismatch". You MUST state clearly what the current video did wrong based on the ledger's `observed` and `frame_observations` (e.g., "From t=01s to t=03s, the character's face morphs and the coffee cup vanishes upon touch").
 2. EXPLICIT TIMESTAMP-ANCHORED TWEAK DIRECTIVE: In `tweak_instruction`, you MUST specify the exact timing (e.g., "At 00:01-00:03...") and provide a precise, literal physical change (e.g., "At 00:02-00:04, keep the coffee cup solid on the wooden table and show the right hand firmly gripping its handle without clipping or dissolving"). Avoid vague buzzwords like "improve quality", "fix glitch", or "make it more realistic". State the exact subject, position, and physical interaction.
-3. LANGUAGE: All output MUST be strictly in clear English.
-4. RESPECT INTENTIONAL CHOICES: Cross-reference `director_choices`. Do not flag intentional stylistic or camera choices as defects unless they violate fundamental continuity or physics.
-5. LIMIT & DEDUPLICATE: Merge related root causes. Provide 1 to 4 distinct, high-impact suggestions, sorted by severity.
+3. BOLD VISUAL CONTRAST: Frame instructions with strong, visually prominent verbs (e.g., "Replace X with Y", "Transform X into Y", "Dramatically increase...", "Clearly render..."). Ensure the fix will produce an obvious, unmistakable visual delta on screen.
+4. LANGUAGE: All output MUST be strictly in clear English.
+5. RESPECT INTENTIONAL CHOICES: Cross-reference `director_choices`. Do not flag intentional stylistic or camera choices as defects unless they violate fundamental continuity or physics.
+6. LIMIT & DEDUPLICATE: Merge related root causes. Provide 1 to 4 distinct, high-impact suggestions, sorted by severity.
 """
 
     prompt_content = f"""Final Shot Prompt: {final_prompt}

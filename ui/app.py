@@ -814,42 +814,75 @@ with col2:
             with st.container(border=True):
                 st.markdown("##### 💬 Conversational Fine-Tuning")
                 if inter_id:
+                    tweak_mode = st.radio(
+                        "Fine-Tuning Impact Mode",
+                        options=[
+                            "🎬 Reshoot with Tweak (High Impact / Visibly Distinct)",
+                            "✂️ Surgical In-Place Edit (Subtle V2V Patch)"
+                        ],
+                        index=0,
+                        key=f"tweak_mode_{idx}",
+                        horizontal=True,
+                        help="Reshoot creates a clearly distinct take integrating your correction with the storyboard keyframe anchor. Surgical In-Place Edit applies latent video-to-video diffusion directly onto the source footage."
+                    )
                     col_t1, col_t2 = st.columns([3, 1], vertical_alignment="bottom")
                     with col_t1:
                         # Check if a suggestion was pasted for this input
                         if f"pending_tweak_input_{idx}" in st.session_state:
                             st.session_state[f"tweak_input_{idx}"] = st.session_state.pop(f"pending_tweak_input_{idx}")
                         tweak_cmd = st.text_area(
-                            "Fine-tune this take with one or more instructions (e.g., lower lighting contrast, enhance rain)",
+                            "Fine-tune this take with one or more instructions",
                             key=f"tweak_input_{idx}",
                             height=75,
-                            placeholder="e.g., Dim the lights slightly; Make the rain heavier and reflect neon lights on the ground"
+                            placeholder="e.g., Change jacket color to bright red; Add heavy pouring rain with lightning reflections in puddles"
                         )
                     with col_t2:
                         tweak_btn = st.button("✨ Apply Tweak", key=f"tweak_btn_{idx}", type="primary", use_container_width=True)
 
                     if tweak_btn and tweak_cmd.strip():
-                        with st.spinner(f"Omni performing incremental fine-tuning on Take {take['take_num']}..."):
+                        is_reshoot = tweak_mode.startswith("🎬")
+                        spinner_msg = (
+                            f"Omni reshooting Take {take['take_num']} with high-impact correction..."
+                            if is_reshoot
+                            else f"Omni performing surgical in-place edit on Take {take['take_num']}..."
+                        )
+                        with st.spinner(spinner_msg):
                             try:
                                 from engine.generator import generate_video
                                 original_scene = st.session_state.get("director_final", st.session_state.get("original_prompt", ""))
-                                full_tweak_prompt = (
-                                    f"[PRIMARY EDIT DIRECTIVE]:\n"
-                                    f"Apply this specific change to the attached source video: {tweak_cmd.strip()}.\n\n"
-                                    f"[SCENE CONTEXT]:\n"
-                                    f"{original_scene}\n\n"
-                                    f"[CONTINUITY REQUIREMENT]: Keep the overall character identity and background setting from the attached video, but execute the primary edit directive thoroughly."
-                                )
-                                # Conversational fine-tuning via Omni Source Video edit!
-                                res = generate_video(
-                                    prompt=full_tweak_prompt,
-                                    source_video_path=take.get("video_path"),
-                                    first_frame_path=st.session_state.get("director_selected_kf"),
-                                    interaction_id=inter_id,
-                                    video_engine="gemini-omni-flash-preview",
-                                    duration_seconds=vid_duration,
-                                    use_live_veo=live_veo
-                                )
+                                
+                                if is_reshoot:
+                                    # High-impact reshoot: ground to storyboard keyframe + inject explicit director correction
+                                    full_tweak_prompt = (
+                                        f"{original_scene}\n\n"
+                                        f"[DIRECTOR'S CORRECTION FOR THIS TAKE]:\n"
+                                        f"Execute this mandatory change with high visual prominence and bold contrast: {tweak_cmd.strip()}.\n"
+                                        f"Ensure this correction is clearly noticeable and prominently featured throughout the footage."
+                                    )
+                                    res = generate_video(
+                                        prompt=full_tweak_prompt,
+                                        source_video_path=None,
+                                        first_frame_path=st.session_state.get("director_selected_kf"),
+                                        video_engine="gemini-omni-flash-preview",
+                                        duration_seconds=vid_duration,
+                                        use_live_veo=live_veo
+                                    )
+                                else:
+                                    # Surgical V2V edit: clean, assertive prompt without diluting continuity constraints
+                                    full_tweak_prompt = (
+                                        f"MANDATORY VIDEO MODIFICATION DIRECTIVE:\n"
+                                        f"Visibly and noticeably transform the attached video.\n"
+                                        f"Execute this change with high visual prominence and physical contrast: {tweak_cmd.strip()}.\n"
+                                        f"Make sure this change is immediately distinguishable from the original clip on screen."
+                                    )
+                                    res = generate_video(
+                                        prompt=full_tweak_prompt,
+                                        source_video_path=take.get("video_path"),
+                                        interaction_id=inter_id,
+                                        video_engine="gemini-omni-flash-preview",
+                                        duration_seconds=vid_duration,
+                                        use_live_veo=live_veo
+                                    )
                                 new_take = len(st.session_state["take_history"]) + 1
                                 st.session_state["take_history"].append({
                                     "take_num": new_take,
