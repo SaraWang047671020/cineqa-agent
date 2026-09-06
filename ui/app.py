@@ -834,12 +834,13 @@ with col2:
                                 from engine.generator import generate_video
                                 original_scene = st.session_state.get("director_final", st.session_state.get("original_prompt", ""))
                                 full_tweak_prompt = (
-                                    f"Original Scene: {original_scene}\n\n"
-                                    f"[DIRECTOR TWEAK DIRECTIVE]:\n"
-                                    f"Modify the attached video by applying this specific change: {tweak_cmd.strip()}.\n"
-                                    f"Maintain consistent character identity, environment, lighting tone, and continuity from the source video take."
+                                    f"[PRIMARY EDIT DIRECTIVE]:\n"
+                                    f"Apply this specific change to the attached source video: {tweak_cmd.strip()}.\n\n"
+                                    f"[SCENE CONTEXT]:\n"
+                                    f"{original_scene}\n\n"
+                                    f"[CONTINUITY REQUIREMENT]: Keep the overall character identity and background setting from the attached video, but execute the primary edit directive thoroughly."
                                 )
-                                # Conversational fine-tuning via Omni Interaction ID & Source Video!
+                                # Conversational fine-tuning via Omni Source Video edit!
                                 res = generate_video(
                                     prompt=full_tweak_prompt,
                                     source_video_path=take.get("video_path"),

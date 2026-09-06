@@ -273,7 +273,9 @@ def generate_video(
                         "Content-Type": "application/json; charset=utf-8"
                     }
                     inputs = []
-                    if first_frame_path and os.path.exists(first_frame_path):
+                    # For edit task, ONLY pass the source video and modification instruction.
+                    # Attaching first_frame_path during edit forces Omni to re-anchor to static frame 0 and ignore dynamic tweak instructions.
+                    if not source_video_path and first_frame_path and os.path.exists(first_frame_path):
                         with open(first_frame_path, "rb") as f:
                             b64 = base64.b64encode(f.read()).decode("utf-8")
                             mime = "image/png" if first_frame_path.lower().endswith(".png") else "image/jpeg"
