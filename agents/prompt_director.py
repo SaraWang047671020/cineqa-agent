@@ -190,17 +190,14 @@ Palette:
 - warm color palette, amber tones — comfort, memory, intimacy
 - cool color palette, blue tones — distance, unease, night
 
-=== TOOL USE RULES ===
-You have access to `get_axis_priority(scene_summary)`, which returns historical signals about which creative dimensions users most often end up regretting (asking to tweak afterwards) and how often the agent's recommendations get overridden.
-
-- Call it ONCE, before choosing the FIRST question, passing a short summary of the user's scene.
-- The tool distinguishes STRONG and WEAK signals by sample size:
+=== HISTORICAL SIGNAL USAGE ===
+If a `Historical Guidance Priority Signal` is provided in the input prompt:
+- The signal distinguishes STRONG and WEAK signals by sample size:
   * Act decisively on STRONG signals — reorder your questions to ask that dimension first.
   * Treat WEAK signals as a tiebreaker only; do NOT let a handful of data points override the default blocking-first order (action → camera → location → lighting → style).
 - If it reports low acceptance for a dimension, be especially careful with your recommendation there; offer more genuinely distinct alternatives.
 - If it returns "no historical data" or default order, proceed with the default blocking order (action → camera → location → lighting → style) without comment.
-- Do NOT call it again for subsequent questions.
-- When you do follow a historical signal, say so in `why_this_axis`, and be honest about its strength (e.g., "Historical signals show users frequently regret not specifying lighting early for this type of scene, so we address lighting first." vs. "A small number of previous sessions suggested early attention to lighting...").
+- When you do follow a historical signal, say so in `why_this_axis`.
 
 === CRITICAL CONFLICT & DEPENDENCY RULES ===
 - If `static locked-off camera` is chosen: `action` options MUST describe the subject moving across the screen space. NEVER offer tracking/pan/handheld/arc.
@@ -213,47 +210,36 @@ You have access to `get_axis_priority(scene_summary)`, which returns historical 
 """
 
     answered_str = json.dumps(answered, ensure_ascii=False, indent=2)
-    use_tools = (len(answered) == 0)
+
+    historical_hint = ""
+    if len(answered) == 0:
+        try:
+            from agents.mcp_client_wrapper import get_axis_priority
+            sig = get_axis_priority(user_prompt[:200])
+            if sig:
+                historical_hint = f"\n\nHistorical Guidance Priority Signal: {sig}"
+        except Exception:
+            pass
+
+    contents = (
+        f"Original User Prompt: {user_prompt}\n\n"
+        f"Previously Answered Questions:\n{answered_str}"
+        f"{historical_hint}\n\n"
+        f"Provide the next question or indicate we are done."
+    )
 
     def _execute():
         client = settings.get_genai_client()
-        if use_tools:
-            from agents.mcp_client_wrapper import get_axis_priority
-            chat = client.chats.create(
-                model=model,
-                config=GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    tools=[get_axis_priority],
-                    temperature=0.2,
-                ),
+        return client.models.generate_content(
+            model=model,
+            contents=[contents],
+            config=GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_mime_type="application/json",
+                response_schema=schema,
+                temperature=0.2
             )
-            print(f"[PromptDirector] Starting first question with agentic get_axis_priority MCP tool calling...")
-            chat.send_message(
-                f"Original User Prompt: {user_prompt}\n\n"
-                f"Previously Answered Questions:\n{answered_str}\n\n"
-                f"Decide which dimension to ask about first. "
-                f"You may call get_axis_priority to check historical data before deciding."
-            )
-            return chat.send_message(
-                "Now output the next question as JSON adhering to the required schema.",
-                config=GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=schema,
-                    temperature=0.2,
-                ),
-            )
-        else:
-            contents = f"Original User Prompt: {user_prompt}\n\nPreviously Answered Questions:\n{answered_str}\n\nProvide the next question or indicate we are done."
-            return client.models.generate_content(
-                model=model,
-                contents=[contents],
-                config=GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    response_mime_type="application/json",
-                    response_schema=schema,
-                    temperature=0.2
-                )
-            )
+        )
 
     response = _call_with_retry(_execute)
     return json.loads(response.text)
