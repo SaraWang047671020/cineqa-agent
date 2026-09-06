@@ -555,13 +555,17 @@ def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str
                             "type": "string",
                             "description": f"Concrete explanation stating EXACTLY what went wrong in the current video using real video seconds (0.0s to {duration:.1f}s). NEVER use 00:XX or frame numbers."
                         },
-                        "tweak_instruction": {
-                            "type": "string",
-                            "description": f"Timestamp-anchored, surgical imperative instruction telling Omni at which real video elapsed timing to change what into what. Format in float seconds (e.g. '0.4s - {min(duration, 1.2):.1f}s'). NEVER use 00:XX or frame indices."
-                        },
                         "timestamp_range": {
                             "type": "string",
                             "description": f"The exact timing in real video elapsed seconds (0.0s to {duration:.1f}s). NEVER use frame indices or 00:XX."
+                        },
+                        "where_in_frame": {
+                            "type": "string",
+                            "description": "Plain-language spatial location in the frame (e.g. 'center foreground', 'upper right background', 'bottom left near character hand', 'throughout the frame')."
+                        },
+                        "why_it_matters": {
+                            "type": "string",
+                            "description": "Visual or narrative impact explaining why this defect weakens the shot or breaks continuity, without prescribing how to fix it."
                         },
                         "related_claims": {
                             "type": "array",
@@ -576,7 +580,7 @@ def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str
                             "enum": ["tweak", "reshoot"]
                         }
                     },
-                    "required": ["issue", "tweak_instruction", "timestamp_range", "related_claims", "severity", "fix_mode"]
+                    "required": ["issue", "timestamp_range", "where_in_frame", "why_it_matters", "related_claims", "severity", "fix_mode"]
                 }
             }
         },
@@ -584,7 +588,7 @@ def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str
     }
 
     system_instruction = f"""You are a senior VFX Supervisor and AI Cinematography Director.
-You evaluate the verification ledger of a generated video take and formulate targeted, conversational tweak suggestions for Gemini Omni.
+You evaluate the verification ledger of a generated video take and formulate targeted, spatial defect observations for the director.
 
 CRITICAL REAL-TIME TIMESTAMP DIRECTIVE (ABSOLUTE PROHIBITION ON 00:XX AND TIMESTAMPS > {duration:.1f}s):
 - The generated video is strictly {duration:.1f} seconds long (0.0s to {duration:.1f}s). Any timestamp above {duration:.1f}s does NOT exist.
@@ -596,16 +600,25 @@ CRITICAL REAL-TIME TIMESTAMP DIRECTIVE (ABSOLUTE PROHIBITION ON 00:XX AND TIMEST
   * For full-clip defects: write "From 0.0s to {duration:.1f}s (throughout the {duration:.0f}-second clip)" or "Throughout the clip (0.0s - {duration:.1f}s)", and for timestamp_range use "0.0s - {duration:.1f}s (Whole Clip)".
   * For specific moments: write "From 0.0s to 0.4s", "Between 1.2s and {min(duration, 2.5):.1f}s", "At t=0.8s".
 
-CRITICAL INSTRUCTION REQUIREMENTS:
+CRITICAL OBSERVATION REQUIREMENTS:
 1. POINT OUT THE EXACT CURRENT MISTAKE: In `issue`, do NOT write vague summaries. You MUST state clearly what the current video did wrong using real video elapsed seconds (0.0s - {duration:.1f}s).
-2. EXPLICIT TIMESTAMP-ANCHORED TWEAK DIRECTIVE: In `tweak_instruction`, specify the real video second timing (e.g., "From 0.4s to 1.2s...") and provide a precise, literal physical change. Avoid vague buzzwords.
-3. CONCRETE AND SPECIFIC: Provide exact, actionable physical parameters.
+2. OBSERVE, DO NOT PRESCRIBE (CRITICAL):
+   Your job is to tell the user WHERE to look and WHAT you observed — never HOW to fix it.
+   - `issue` must be a factual observation, stated in the past/present tense.
+     GOOD: "The rain thins out noticeably between 4.2s and 8.0s."
+     BAD:  "Increase the rain intensity throughout the shot."
+   - NEVER write an imperative sentence. NEVER propose wording the user could paste.
+   - Do not include phrases like "you should", "try", "make it", "add", "increase", "keep".
+   - If you are tempted to suggest a fix, put that information into `why_it_matters` as an explanation of the consequence instead.
+     GOOD: "The shot was built around the storm's intensity, so losing the rain in the second half weakens the ending."
+     BAD:  "Adding more rain would make the ending stronger."
+3. ANCHOR IN TIME AND SPACE: Every suggestion must state a real second range (`timestamp_range`) and a plain-language location (`where_in_frame`).
 4. CHOOSE THE PROPER FIX MODE (`fix_mode`):
    - Set to `tweak` for incremental changes (lighting, color, weather, atmosphere, minor surface textures).
    - Set to `reshoot` for structural motion synthesis failures (topological continuity, body parts vanishing/morphing, actions that never physically occurred, physics violations).
 5. LANGUAGE: All output MUST be strictly in clear English.
 6. RESPECT INTENTIONAL CHOICES: Cross-reference `director_choices`.
-7. LIMIT & DEDUPLICATE: Merge related root causes. Provide 1 to 4 distinct suggestions, sorted by severity.
+7. LIMIT & DEDUPLICATE: Merge related root causes. Provide 1 to 3 distinct observations, sorted by severity. Fewer, higher-confidence observations are better than an exhaustive list.
 """
 
     prompt_content = f"""Final Shot Prompt: {final_prompt}
@@ -616,7 +629,7 @@ Director's Prior Guided Choices:
 Verification Failure Items (with Verified Real-Time Timestamps across {duration:.1f}s video):
 {json.dumps(enriched_failures, ensure_ascii=False, indent=2)}
 
-Analyze the verification failures, use the verified real video timestamps (NOT frame indices) and visible defects from the ledger's frame observations, and produce 1-4 timestamp-anchored, surgical tweak instructions."""
+Analyze the verification failures, use the verified real video timestamps (NOT frame indices) and visible defects from the ledger's frame observations, and produce 1-3 timestamp-anchored, spatial observations of visible defects and why they matter."""
 
     def _execute():
         client = settings.get_genai_client()
@@ -635,9 +648,12 @@ Analyze the verification failures, use the verified real video timestamps (NOT f
 
     try:
         data = json.loads(response.text)
-        for sug in data.get("suggestions", []):
+        suggestions = data.get("suggestions", [])[:3]
+        for sug in suggestions:
+            sug.pop("tweak_instruction", None)
             sug["issue"] = clean_timestamp_string(sug.get("issue", ""), total_frames=total_frames, duration=duration)
-            sug["tweak_instruction"] = clean_timestamp_string(sug.get("tweak_instruction", ""), total_frames=total_frames, duration=duration)
+            sug["where_in_frame"] = clean_timestamp_string(sug.get("where_in_frame", ""), total_frames=total_frames, duration=duration)
+            sug["why_it_matters"] = clean_timestamp_string(sug.get("why_it_matters", ""), total_frames=total_frames, duration=duration)
             ts_range = clean_timestamp_string(str(sug.get("timestamp_range", "")).strip(), total_frames=total_frames, duration=duration)
 
             rel = sug.get("related_claims", [])
@@ -666,13 +682,14 @@ Analyze the verification failures, use the verified real video timestamps (NOT f
                 "contact", "touch", "body", "pose", "turn", "face", "fall", "climb", "speed", "direction",
                 "discontinuity", "morph", "teleport", "clip"
             ]
-            text_to_check = (sug.get("issue", "") + " " + sug.get("tweak_instruction", "")).lower()
+            text_to_check = (sug.get("issue", "") + " " + sug.get("why_it_matters", "")).lower()
             rel_has_action = any(
                 ef.get("claim_type") in ("action", "direction", "relative_position", "relative_size", "count", "physics_sanity", "existence")
                 for ef in enriched_failures if ef.get("claim_id") in rel
             )
             if any(kw in text_to_check for kw in act_keywords) or rel_has_action:
                 sug["fix_mode"] = "reshoot"
+        data["suggestions"] = suggestions
         return data
     except Exception as e:
         print(f"[PromptDirector] Failed to parse suggest_tweaks response: {e}")

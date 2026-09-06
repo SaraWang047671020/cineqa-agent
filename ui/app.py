@@ -868,171 +868,6 @@ with col2:
             st.video(take["video_path"])
             st.info('🎬 **Prompt Used:** ' + take.get('prompt', ''))
             
-            # Conversational Fine-Tuning (Omni Interactions)
-            inter_id = take.get("interaction_id")
-            with st.container(border=True):
-                st.markdown("##### 💬 Conversational Fine-Tuning")
-                if inter_id:
-                    mode_options = [
-                        "🎬 Reshoot with Correction (從首幀重新生成 — 推薦：動作、運鏡、物理、實體修正)",
-                        "✂️ Surgical In-Place Edit (原片直接微調 — 僅適用：全片色調、微調光影、雨霧氛圍)"
-                    ]
-                    # Streamlit session_state radio validation safety:
-                    # If an existing session holds an older string not present in mode_options,
-                    # migrate it or pop it immediately so st.radio does not crash with StreamlitAPIException!
-                    if f"pending_tweak_mode_{idx}" in st.session_state:
-                        p_mode = st.session_state.pop(f"pending_tweak_mode_{idx}")
-                        st.session_state[f"tweak_mode_{idx}"] = (
-                            mode_options[1] if p_mode == "tweak" else mode_options[0]
-                        )
-                    elif f"tweak_mode_{idx}" in st.session_state and st.session_state[f"tweak_mode_{idx}"] not in mode_options:
-                        old_v = str(st.session_state.pop(f"tweak_mode_{idx}", ""))
-                        st.session_state[f"tweak_mode_{idx}"] = (
-                            mode_options[1] if ("Surgical" in old_v or "In-Place" in old_v or "微調" in old_v) else mode_options[0]
-                        )
-
-                    tweak_mode = st.radio(
-                        "Fine-Tuning Execution Mode",
-                        options=mode_options,
-                        key=f"tweak_mode_{idx}",
-                        horizontal=True,
-                        help="Reshoot creates a new take integrating the correction with the opening first frame anchor. Surgical In-Place Edit applies a precise minimal edit directly onto the source footage."
-                    )
-
-                    if tweak_mode.startswith("✂️"):
-                        st.caption("ℹ️ **原片微調 (V2V) 提示**：此模式直接以 Take 1 的 MP4 像素進行局部後製疊加，適合微調光線、雨霧或色調。**AI 影片模型無法在原片像素上重新生成不存在的骨架動作、走位或運鏡**。如需修正角色動作或運鏡，強烈建議選擇「🎬 **Reshoot with Correction**」！")
-
-                    col_t1, col_t2 = st.columns([3, 1], vertical_alignment="bottom")
-                    with col_t1:
-                        # Check if a suggestion was pasted for this input
-                        if f"pending_tweak_input_{idx}" in st.session_state:
-                            st.session_state[f"tweak_input_{idx}"] = st.session_state.pop(f"pending_tweak_input_{idx}")
-                        tweak_cmd = st.text_area(
-                            "Fine-tune this take with one or more instructions",
-                            key=f"tweak_input_{idx}",
-                            height=75,
-                            placeholder="e.g., Lower key light by two stops; Add heavy rain with water dripping from the character's hooded brim"
-                        )
-                    with col_t2:
-                        tweak_btn = st.button("✨ Apply Tweak", key=f"tweak_btn_{idx}", type="primary", use_container_width=True)
-
-                    if tweak_btn and tweak_cmd.strip():
-                        from agents.prompt_director import clean_timestamp_string
-                        clean_cmd = clean_timestamp_string(tweak_cmd.strip(), duration=vid_duration)
-                        is_reshoot = tweak_mode.startswith("🎬")
-                        spinner_msg = (
-                            f"Omni reshooting Take {take['take_num']} with correction from First Frame..."
-                            if is_reshoot
-                            else f"Omni performing precise surgical edit on Take {take['take_num']}..."
-                        )
-                        with st.spinner(spinner_msg):
-                            try:
-                                from engine.generator import generate_video
-                                original_scene = st.session_state.get("director_final", st.session_state.get("original_prompt", ""))
-                                
-                                if is_reshoot:
-                                    # Reshoot: ground to opening first frame + inject explicit director correction
-                                    full_tweak_prompt = (
-                                        f"The attached image is the EXACT FIRST FRAME (Frame 0, starting state) of the video shot. "
-                                        f"Seamlessly animate the cinematic motion and camera forward directly from this starting frame, incorporating the director's correction below:\n\n"
-                                        f"{original_scene}\n\n"
-                                        f"[DIRECTOR'S CORRECTION FOR THIS TAKE]:\n"
-                                        f"{clean_cmd}\n\n"
-                                        f"Where this correction conflicts with the original description above, "
-                                        f"the correction takes precedence. Everything else stays as described."
-                                    )
-                                    res = generate_video(
-                                        prompt=full_tweak_prompt,
-                                        source_video_path=None,
-                                        first_frame_path=st.session_state.get("director_selected_kf"),
-                                        video_engine="gemini-omni-flash-preview",
-                                        duration_seconds=vid_duration,
-                                        use_live_veo=live_veo
-                                    )
-                                else:
-                                    # Surgical V2V edit: direct assertive edit directive (no conflicting negative preservation rules)
-                                    full_tweak_prompt = (
-                                        f"[MANDATORY VIDEO EDIT INSTRUCTION]:\n"
-                                        f"{clean_cmd}\n\n"
-                                        f"[EDIT EXECUTION DIRECTIVE]:\n"
-                                        f"Apply the edit instruction above visibly, clearly, and prominently to the attached video. "
-                                        f"Transform the video footage to noticeably reflect this correction across the clip while maintaining core subject and environment identity."
-                                    )
-                                    res = generate_video(
-                                        prompt=full_tweak_prompt,
-                                        source_video_path=take.get("video_path"),
-                                        interaction_id=inter_id,
-                                        video_engine="gemini-omni-flash-preview",
-                                        duration_seconds=vid_duration,
-                                        use_live_veo=live_veo
-                                    )
-                                new_take = len(st.session_state["take_history"]) + 1
-                                st.session_state["take_history"].append({
-                                    "take_num": new_take,
-                                    "prompt": f"[Tweak from Take {take['take_num']}]: {clean_cmd}",
-                                    "video_path": res["video_path"],
-                                    "ledger": None,
-                                    "remediated_plan": None,
-                                    "seed": res.get("seed_used"),
-                                    "interaction_id": res.get("interaction_id"),
-                                    "duration": vid_duration
-                                })
-                                
-                                # If this tweak originated from a pasted suggestion, mark was_applied
-                                pasted_sug_id = st.session_state.get(f"last_pasted_sug_id_{idx}")
-                                pasted_text = st.session_state.get(f"last_pasted_text_{idx}")
-                                if pasted_sug_id and (pasted_text == tweak_cmd.strip()):
-                                    def _bg_update_applied(s_id=pasted_sug_id):
-                                        try:
-                                            from database.logger import update_tweak_suggestion
-                                            update_tweak_suggestion(suggestion_id=s_id, was_applied=True)
-                                        except Exception:
-                                            pass
-                                    import threading
-                                    threading.Thread(target=_bg_update_applied, daemon=True).start()
-                                    
-                                # If user sent it, also log was_sent
-                                if pasted_sug_id:
-                                    def _bg_update_send(s_id=pasted_sug_id):
-                                        try:
-                                            from database.logger import update_tweak_suggestion
-                                            update_tweak_suggestion(
-                                                suggestion_id=s_id, 
-                                                was_sent=True, 
-                                                user_final_text=tweak_cmd.strip()
-                                            )
-                                        except Exception:
-                                            pass
-                                    import threading
-                                    threading.Thread(target=_bg_update_send, daemon=True).start()
-
-                                # Telemetry tracking for guidance_events: tweak_requested
-                                def _bg_log_tweak(cmd=tweak_cmd.strip(), s_id=st.session_state.get("session_id"), s_sum=st.session_state.get("original_prompt", ""), a_asked=[a['axis'] for a in st.session_state.get("director_answered", [])]):
-                                    try:
-                                        from agents.prompt_director import infer_tweak_axis
-                                        from database.logger import log_guidance_event
-                                        inferred_axis, confidence = infer_tweak_axis(cmd)
-                                        log_guidance_event(
-                                            session_id=s_id,
-                                            event_type='tweak_requested',
-                                            axis=inferred_axis,
-                                            tweak_text=cmd,
-                                            axes_asked=a_asked,
-                                            scene_summary=s_sum[:200],
-                                            axis_confidence=confidence
-                                        )
-                                    except Exception as e:
-                                        print(f"[_bg_log_tweak ERROR]: {e}")
-                                import threading
-                                threading.Thread(target=_bg_log_tweak, daemon=True).start()
-
-                                st.success("Fine-tuned take generated successfully!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Fine-tuning failed: {e}")
-                else:
-                    st.caption("⚠️ No Omni Interaction ID available for this take (generated by Veo or legacy take), conversational fine-tuning unsupported.")
-
             # 1. VERIFICATION STAGE
             if take["ledger"] is None:
                 if st.button(f"▶️ Run Verification (Take {take['take_num']})", key=f"verify_{idx}", type="primary", use_container_width=True):
@@ -1116,13 +951,13 @@ with col2:
                         st.markdown(f"**🧐 Causal Analysis:** {r.get('event_causal_order', 'N/A')}")
                         st.markdown(f"**🎥 Frame Observations:** {r.get('frame_observations', 'N/A')}")
                 
-                # --- Suggest Tweaks Block (Delta-driven Tweak Recommendations) ---
+                # --- Suggest Tweaks Block (Observations Only) ---
                 failed_items = [r for r in take["ledger"] if r.get("verdict") in ("MISMATCH", "CANNOT_DETERMINE")]
                 if failed_items:
                     take_dur = float(take.get("duration", vid_duration) or 4.0)
                     # Auto-generate suggestions if not already generated for this take
                     if "tweak_suggestions" not in take:
-                        with st.spinner("Analyzing verification ledger and synthesizing tweak recommendations..."):
+                        with st.spinner("Analyzing verification ledger and synthesizing defect observations..."):
                             try:
                                 from agents.prompt_director import suggest_tweaks, clean_timestamp_string
                                 choices_dict = {}
@@ -1139,8 +974,10 @@ with col2:
                                 for s in raw_sug:
                                     s["suggestion_id"] = str(uuid.uuid4())[:8]
                                     s["issue"] = clean_timestamp_string(s.get("issue", ""), duration=take_dur)
-                                    s["tweak_instruction"] = clean_timestamp_string(s.get("tweak_instruction", ""), duration=take_dur)
+                                    s["where_in_frame"] = clean_timestamp_string(s.get("where_in_frame", ""), duration=take_dur)
+                                    s["why_it_matters"] = clean_timestamp_string(s.get("why_it_matters", ""), duration=take_dur)
                                     s["timestamp_range"] = clean_timestamp_string(str(s.get("timestamp_range", f"0.0s - {take_dur:.1f}s (Whole Clip)")), duration=take_dur)
+                                    s.pop("tweak_instruction", None)
                                 take["tweak_suggestions"] = raw_sug
 
                                 # Optional ClickHouse Logging
@@ -1162,91 +999,172 @@ with col2:
 
                     sugs = take.get("tweak_suggestions", [])
                     if sugs:
-                        col_hdr1, col_hdr2 = st.columns([2.5, 1.3], vertical_alignment="center")
-                        with col_hdr1:
-                            st.markdown("#### 🔧 Detected Issues & Tweak Suggestions")
-                            st.caption("Root causes deduplicated and prioritized by impact.")
-                        with col_hdr2:
-                            if len(sugs) > 1:
-                                if st.button("📋 Paste All Suggestions", key=f"paste_all_{idx}", use_container_width=True):
-                                    from agents.prompt_director import clean_timestamp_string
-                                    all_instructions = [clean_timestamp_string(s.get("tweak_instruction", ""), duration=take_dur).strip() for s in sugs if s.get("tweak_instruction")]
-                                    st.session_state[f"pending_tweak_input_{idx}"] = "; ".join(all_instructions)
-                                    # If any suggestion requires reshoot, set mode to reshoot
-                                    has_reshoot = any(s.get("fix_mode") == "reshoot" for s in sugs)
-                                    st.session_state[f"pending_tweak_mode_{idx}"] = "reshoot" if has_reshoot else "tweak"
-                                    for s in sugs:
-                                        if s.get("suggestion_id"):
-                                            def _bg_update_paste_all(s_id=s.get("suggestion_id")):
-                                                try:
-                                                    from database.logger import update_tweak_suggestion
-                                                    update_tweak_suggestion(suggestion_id=s_id, was_pasted=True)
-                                                except Exception:
-                                                    pass
-                                            import threading
-                                            threading.Thread(target=_bg_update_paste_all, daemon=True).start()
-                                    st.success("All suggestions merged into tweak box!")
-                                    st.rerun()
-
-                        current_box_text = st.session_state.get(f"tweak_input_{idx}", "").strip()
+                        st.markdown("#### 🔍 Defect Observations & Focus Areas")
+                        st.caption("Factual observations anchored in time and space to guide your fine-tuning.")
 
                         for s_idx, sug in enumerate(sugs):
                             from agents.prompt_director import clean_timestamp_string
-                            severity_badge = {
-                                "high": "🔴 High Severity",
-                                "medium": "🟡 Medium Severity",
-                                "low": "🟢 Low / May be intentional"
-                            }.get(sug.get("severity", "medium"), "🟡 Medium")
-
+                            sev_icon = "🔴" if sug.get("severity") == "high" else ("🟡" if sug.get("severity") == "medium" else "🟢")
                             fix_mode = sug.get("fix_mode", "tweak")
                             if fix_mode == "reshoot":
-                                mode_badge = "🎬 **Recommended Mode: Reshoot** (Structural motion/continuity break — cannot be patched via V2V, needs regeneration)"
+                                mode_badge = "🎬 **需重新生成** (結構性動作/物體消失缺陷，原片微調無法修復)"
                             else:
-                                mode_badge = "✂️ **Recommended Mode: Surgical Edit** (Incremental fix — suitable for direct V2V edit on existing footage)"
+                                mode_badge = "✂️ **可微調**"
 
-                            tweak_text = clean_timestamp_string(sug.get("tweak_instruction", "").strip(), duration=take_dur)
-                            already_in_box = tweak_text in current_box_text if current_box_text else False
+                            cleaned_ts = clean_timestamp_string(str(sug.get('timestamp_range', f"0.0s - {take_dur:.1f}s (Whole Clip)")), duration=take_dur)
+                            cleaned_where = sug.get('where_in_frame') or '全畫面'
+                            cleaned_issue = clean_timestamp_string(sug.get('issue', ''), duration=take_dur)
+                            why_matters = sug.get('why_it_matters', '')
 
                             with st.container(border=True):
-                                col_sug_text, col_sug_btn = st.columns([3, 1], vertical_alignment="center")
-                                with col_sug_text:
-                                    cleaned_ts = clean_timestamp_string(str(sug.get('timestamp_range', f"0.0s - {take_dur:.1f}s (Whole Clip)")), duration=take_dur)
-                                    ts_badge = f"⏱️ `{cleaned_ts}`"
-                                    cleaned_issue = clean_timestamp_string(sug.get('issue', ''), duration=take_dur)
-                                    st.markdown(f"**⚠️ Current Defect:** {cleaned_issue} &nbsp; {ts_badge} &nbsp; `{severity_badge}`")
-                                    st.caption(mode_badge)
-                                    if sug.get("related_claims"):
-                                        st.caption(f"Related claims: {', '.join(sug.get('related_claims', []))}")
-                                    st.markdown("**🎯 Surgical Tweak Directive:**")
-                                    st.code(tweak_text, language="text")
-                                with col_sug_btn:
-                                    if already_in_box:
-                                        btn_label = "✅ In Tweak Box"
-                                    elif current_box_text:
-                                        btn_label = "➕ Append to Box"
-                                    else:
-                                        btn_label = "📋 Paste to Box"
+                                st.markdown(f"{sev_icon} **`{cleaned_ts}`** ｜ **{cleaned_where}** ｜ {mode_badge}")
+                                st.markdown(f"**現象觀察：** {cleaned_issue}")
+                                if why_matters:
+                                    st.caption(f"💡 **影響分析：** {why_matters}")
+                                if sug.get("related_claims"):
+                                    st.caption(f"關聯檢查點: {', '.join(sug.get('related_claims', []))}")
 
-                                    if st.button(btn_label, key=f"paste_sug_{idx}_{s_idx}", use_container_width=True):
-                                        if current_box_text and not already_in_box:
-                                            merged_val = f"{current_box_text}; {tweak_text}"
-                                        else:
-                                            merged_val = tweak_text
-                                        st.session_state[f"pending_tweak_input_{idx}"] = merged_val
-                                        st.session_state[f"pending_tweak_mode_{idx}"] = fix_mode
-                                        st.session_state[f"last_pasted_sug_id_{idx}"] = sug.get("suggestion_id")
-                                        st.session_state[f"last_pasted_text_{idx}"] = tweak_text
-                                        # Update ClickHouse was_pasted
-                                        def _bg_update_paste(s_id=sug.get("suggestion_id")):
-                                            try:
-                                                from database.logger import update_tweak_suggestion
-                                                update_tweak_suggestion(suggestion_id=s_id, was_pasted=True)
-                                            except Exception:
-                                                pass
-                                        import threading
-                                        threading.Thread(target=_bg_update_paste, daemon=True).start()
-                                        st.success(f"Tweak updated in box with {fix_mode.upper()} mode selected!")
-                                        st.rerun()
+            # Conversational Fine-Tuning (Omni Interactions) - Placed directly below observations
+            inter_id = take.get("interaction_id")
+            with st.container(border=True):
+                st.markdown("##### 💬 Conversational Fine-Tuning")
+                if inter_id:
+                    sugs = take.get("tweak_suggestions", [])
+                    has_reshoot = any(s.get("fix_mode") == "reshoot" for s in sugs)
+
+                    if sugs:
+                        st.markdown("**看完上面的觀察後，用一句話告訴 Omni 你想怎麼改。一次改一件事效果最好。**")
+
+                    mode_options = [
+                        "🎬 Reshoot with Correction (從首幀重新生成 — 推薦：動作、運鏡、物理、實體修正)",
+                        "✂️ Surgical In-Place Edit (原片直接微調 — 僅適用：全片色調、微調光影、雨霧氛圍)"
+                    ]
+
+                    # Auto-suggest / default mode based on observation
+                    if f"tweak_mode_{idx}" not in st.session_state:
+                        st.session_state[f"tweak_mode_{idx}"] = mode_options[0] if has_reshoot else mode_options[1]
+                    elif st.session_state[f"tweak_mode_{idx}"] not in mode_options:
+                        old_v = str(st.session_state.pop(f"tweak_mode_{idx}", ""))
+                        st.session_state[f"tweak_mode_{idx}"] = (
+                            mode_options[1] if ("Surgical" in old_v or "In-Place" in old_v or "微調" in old_v) else mode_options[0]
+                        )
+
+                    if has_reshoot:
+                        st.warning("🎬 **系統觀察提示**：檢測到結構性缺陷（動作/運鏡/物體變化），原片微調無法修復，**需重新生成**。建議選擇「🎬 Reshoot with Correction」！")
+
+                    tweak_mode = st.radio(
+                        "Fine-Tuning Execution Mode",
+                        options=mode_options,
+                        key=f"tweak_mode_{idx}",
+                        horizontal=True,
+                        help="Reshoot creates a new take integrating the correction with the opening first frame anchor. Surgical In-Place Edit applies a precise minimal edit directly onto the source footage."
+                    )
+
+                    if tweak_mode.startswith("✂️"):
+                        st.caption("ℹ️ **原片微調 (V2V) 提示**：此模式直接以 Take 的 MP4 像素進行局部後製疊加，適合微調光線、雨霧或色調。**AI 影片模型無法在原片像素上重新生成不存在的骨架動作、走位或運鏡**。如需修正角色動作或運鏡，強烈建議選擇「🎬 **Reshoot with Correction**」！")
+
+                    col_t1, col_t2 = st.columns([3, 1], vertical_alignment="bottom")
+                    with col_t1:
+                        tweak_cmd = st.text_area(
+                            "用一句話告訴 Omni 你想怎麼改 (Fine-Tuning Instruction)",
+                            key=f"tweak_input_{idx}",
+                            height=75,
+                            placeholder="看完上面的觀察後，用一句話告訴 Omni 你想怎麼改。例如：讓人物步伐加快，或降低畫面主光源兩檔（一次改一件事效果最好）"
+                        )
+                    with col_t2:
+                        tweak_btn = st.button("✨ Apply Tweak", key=f"tweak_btn_{idx}", type="primary", use_container_width=True)
+
+                    if tweak_btn and tweak_cmd.strip():
+                        from agents.prompt_director import clean_timestamp_string
+                        clean_cmd = clean_timestamp_string(tweak_cmd.strip(), duration=vid_duration)
+                        is_reshoot = tweak_mode.startswith("🎬")
+                        spinner_msg = (
+                            f"Omni reshooting Take {take['take_num']} with correction from First Frame..."
+                            if is_reshoot
+                            else f"Omni performing precise surgical edit on Take {take['take_num']}..."
+                        )
+                        with st.spinner(spinner_msg):
+                            try:
+                                from engine.generator import generate_video
+                                original_scene = st.session_state.get("director_final", st.session_state.get("original_prompt", ""))
+                                
+                                if is_reshoot:
+                                    # Reshoot: ground to opening first frame + inject explicit director correction
+                                    full_tweak_prompt = (
+                                        f"The attached image is the EXACT FIRST FRAME (Frame 0, starting state) of the video shot. "
+                                        f"Seamlessly animate the cinematic motion and camera forward directly from this starting frame, incorporating the director's correction below:\n\n"
+                                        f"{original_scene}\n\n"
+                                        f"[DIRECTOR'S CORRECTION FOR THIS TAKE]:\n"
+                                        f"{clean_cmd}\n\n"
+                                        f"Where this correction conflicts with the original description above, "
+                                        f"the correction takes precedence. Everything else stays as described."
+                                    )
+                                    res = generate_video(
+                                        prompt=full_tweak_prompt,
+                                        source_video_path=None,
+                                        first_frame_path=st.session_state.get("director_selected_kf"),
+                                        video_engine="gemini-omni-flash-preview",
+                                        duration_seconds=vid_duration,
+                                        use_live_veo=live_veo
+                                    )
+                                else:
+                                    # Surgical V2V edit: direct assertive edit directive
+                                    full_tweak_prompt = (
+                                        f"[MANDATORY VIDEO EDIT INSTRUCTION]:\n"
+                                        f"{clean_cmd}\n\n"
+                                        f"[EDIT EXECUTION DIRECTIVE]:\n"
+                                        f"Apply the edit instruction above visibly, clearly, and prominently to the attached video. "
+                                        f"Transform the video footage to noticeably reflect this correction across the clip while maintaining core subject and environment identity."
+                                    )
+                                    res = generate_video(
+                                        prompt=full_tweak_prompt,
+                                        source_video_path=take.get("video_path"),
+                                        interaction_id=inter_id,
+                                        video_engine="gemini-omni-flash-preview",
+                                        duration_seconds=vid_duration,
+                                        use_live_veo=live_veo
+                                    )
+                                new_take = len(st.session_state["take_history"]) + 1
+                                st.session_state["take_history"].append({
+                                    "take_num": new_take,
+                                    "prompt": f"[Tweak from Take {take['take_num']}]: {clean_cmd}",
+                                    "video_path": res["video_path"],
+                                    "ledger": None,
+                                    "remediated_plan": None,
+                                    "seed": res.get("seed_used"),
+                                    "interaction_id": res.get("interaction_id"),
+                                    "duration": vid_duration
+                                })
+                                
+                                # Reset input box after successful generation
+                                st.session_state[f"tweak_input_{idx}"] = ""
+
+                                # Telemetry tracking for guidance_events: tweak_requested
+                                def _bg_log_tweak(cmd=tweak_cmd.strip(), s_id=st.session_state.get("session_id"), s_sum=st.session_state.get("original_prompt", ""), a_asked=[a['axis'] for a in st.session_state.get("director_answered", [])]):
+                                    try:
+                                        from agents.prompt_director import infer_tweak_axis
+                                        from database.logger import log_guidance_event
+                                        inferred_axis, confidence = infer_tweak_axis(cmd)
+                                        log_guidance_event(
+                                            session_id=s_id,
+                                            event_type='tweak_requested',
+                                            axis=inferred_axis,
+                                            tweak_text=cmd,
+                                            axes_asked=a_asked,
+                                            scene_summary=s_sum[:200],
+                                            axis_confidence=confidence
+                                        )
+                                    except Exception as e:
+                                        print(f"[_bg_log_tweak ERROR]: {e}")
+                                import threading
+                                threading.Thread(target=_bg_log_tweak, daemon=True).start()
+
+                                st.success("Fine-tuned take generated successfully!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Fine-tuning failed: {e}")
+                else:
+                    st.caption("⚠️ No Omni Interaction ID available for this take (generated by Veo or legacy take), conversational fine-tuning unsupported.")
 
                 if is_latest:
                     st.divider()

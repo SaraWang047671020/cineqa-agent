@@ -157,7 +157,7 @@ def log_tweak_suggestions(suggestions, session_id, take_num):
                 str(session_id),
                 int(take_num),
                 str(s.get("issue", "")),
-                str(s.get("tweak_instruction", "")),
+                str(s.get("tweak_instruction", s.get("why_it_matters", ""))),
                 str(s.get("severity", "medium")),
                 0, 0, 0
             ])
