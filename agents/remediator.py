@@ -23,6 +23,9 @@ Follow these strict scientific guidelines:
 1.5. **Quantified Spatial Anchoring (applies to ALL spatial/direction/position fixes)**:
    Whenever a fix touches subject position, movement direction, or relative placement, you MUST express it as explicit screen-space percentages and timestamps (e.g., "X: 15% -> 85%", "t=0s -> t=3s"), matching the same coordinate language the verification step uses. Do NOT rely on vague qualitative terms ("moves to the right", "on the left side") alone — always pair them with a concrete percentage/timestamp anchor.
 
+1.6. **Physical Video Seconds vs. Sampled Frames (CRITICAL)**:
+   Sampled frame numbers (e.g. Frame 1, Frame 5, Frame 15) ARE NOT SECONDS! In video inspection, ~5 frames are sampled per second (~0.20s per frame). For example, Frame 5 is at ~1.0s, Frame 10 is at ~2.0s, and Frame 15 is at ~3.0s in a 4-second video. NEVER write timestamps exceeding the clip duration (e.g., NEVER write 00:05 or 10s for a 4s video). All timing in the prompt must reflect real video elapsed seconds.
+
 2. **Counterfactual Negative Prompt Synthesis** (arXiv:2509.24702):
    - Deliberately include CONCRETE, VISUALLY DESCRIBABLE failure tokens drawn directly from the ledger\'s `observed`/`frame_observations` text for each failed claim — not abstract narrative concepts. Prefer visual nouns/adjectives a video model can actually suppress (e.g., "static subject, centered character, camera tracking shot, morphing limbs, fused geometry, sudden teleportation, attribute bleeding, vanishing props") over abstract phrasing like "reversed causal direction" alone — if a causal/temporal violation must be expressed, pair it with its concrete visual symptom (e.g., "debris flying backward and reassembling" rather than just "reversed causal direction").
 

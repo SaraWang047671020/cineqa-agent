@@ -85,6 +85,21 @@ def stream_pipeline(
         entry["physics_laws"] = verdict_data.get("physics_law_grounding_check", "")
         entry["defect_frame_indices"] = verdict_data.get("defect_frame_indices", [])
 
+        # Map frame indices to real physical elapsed video seconds
+        entry["frame_timestamps"] = [round(ts, 2) for _, ts in frames]
+        defect_indices = entry["defect_frame_indices"]
+        valid_defect_ts = [round(frames[i][1], 2) for i in defect_indices if i < len(frames)]
+        entry["defect_timestamps"] = valid_defect_ts
+        if valid_defect_ts:
+            min_ts = min(valid_defect_ts)
+            max_ts = max(valid_defect_ts)
+            if abs(max_ts - min_ts) < 0.15:
+                entry["defect_time_window"] = f"t={min_ts:.1f}s"
+            else:
+                entry["defect_time_window"] = f"{min_ts:.1f}s - {max_ts:.1f}s"
+        else:
+            entry["defect_time_window"] = "Whole Clip" if entry["verdict"] == "MISMATCH" else ""
+
         entry["defect_boxes"] = []
         if entry["verdict"] == "MISMATCH" and entry["defect_frame_indices"]:
             from engine.verify import localize_defect_bbox

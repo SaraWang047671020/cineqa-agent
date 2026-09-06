@@ -315,12 +315,58 @@ def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str
     """
     Analyzes the entire verification ledger to produce deduplicated, prioritized
     conversational tweak suggestions for Gemini Omni video incremental editing.
+    Ensures all timings reflect real video elapsed seconds (e.g. 0.4s - 1.2s),
+    never confusing sampled frame indices (e.g. Frame 1, Frame 2) with seconds.
     """
     failed_claims = [e for e in (ledger or []) if e.get("verdict") in ("MISMATCH", "CANNOT_DETERMINE")]
     if not failed_claims:
         return {"suggestions": []}
 
     model = settings.DEFAULT_GEMINI_MODEL
+
+    # Pre-process failures to guarantee explicit, unambiguous real video timestamps
+    enriched_failures = []
+    for fc in failed_claims:
+        defect_window = fc.get("defect_time_window")
+        defect_ts = fc.get("defect_timestamps", [])
+        indices = fc.get("defect_frame_indices", [])
+
+        if not defect_window or defect_window == "Whole Clip":
+            if fc.get("frame_timestamps") and indices:
+                ts_list = [fc["frame_timestamps"][i] for i in indices if i < len(fc["frame_timestamps"])]
+                if ts_list:
+                    defect_ts = ts_list
+                    min_t, max_t = min(ts_list), max(ts_list)
+                    defect_window = f"t={min_t:.1f}s" if abs(max_t - min_t) < 0.15 else f"{min_t:.1f}s - {max_t:.1f}s"
+            elif indices:
+                # Fallback estimation: sampled at ~0.2s interval
+                est_ts = [round(i * 0.2, 2) for i in indices]
+                defect_ts = est_ts
+                min_t, max_t = min(est_ts), max(est_ts)
+                defect_window = f"t={min_t:.1f}s" if abs(max_t - min_t) < 0.15 else f"{min_t:.1f}s - {max_t:.1f}s"
+            else:
+                defect_window = "Whole Clip"
+
+        frame_details = []
+        if indices and defect_ts and len(indices) == len(defect_ts):
+            frame_details = [f"Sampled Frame {idx} (captured at t={ts:.2f}s of video)" for idx, ts in zip(indices, defect_ts)]
+        elif indices:
+            frame_details = [f"Sampled Frame {idx}" for idx in indices]
+
+        enriched_failures.append({
+            "claim_id": fc.get("claim_id", ""),
+            "claim_text": fc.get("claim_text", ""),
+            "claim_type": fc.get("type", "action"),
+            "verdict": fc.get("verdict", "MISMATCH"),
+            "observed_defect": fc.get("observed", ""),
+            "frame_observations": fc.get("frame_observations", ""),
+            "physics_sanity": fc.get("physics_sanity", ""),
+            "spatial_geometry": fc.get("spatial_geometry", ""),
+            "motion_anchoring": fc.get("motion_anchoring", ""),
+            "causality": fc.get("causality", ""),
+            "real_defect_video_timestamp": defect_window,
+            "sampled_frames_evidence": frame_details
+        })
 
     schema = {
         "type": "object",
@@ -332,15 +378,15 @@ def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str
                     "properties": {
                         "issue": {
                             "type": "string",
-                            "description": "Concrete explanation stating EXACTLY what went wrong in the current video (e.g. 'Between 00:01-00:03, the man's trench coat suddenly turns from dark brown to bright blue, and the umbrella in his left hand completely disappears')."
+                            "description": "Concrete explanation stating EXACTLY what went wrong in the current video using real elapsed video seconds (e.g. 'Between 0.4s-1.0s, the man's trench coat suddenly turns from dark brown to bright blue, and the umbrella in his left hand completely disappears'). NEVER confuse sampled frame indices with elapsed seconds."
                         },
                         "tweak_instruction": {
                             "type": "string",
-                            "description": "A timestamp-anchored, surgical imperative instruction explicitly telling Omni at which timestamp to change what into what (e.g. 'At 00:01 to 00:03, ensure the man's trench coat remains consistent dark brown and keep the umbrella continuously visible in his left hand')."
+                            "description": "A timestamp-anchored, surgical imperative instruction explicitly telling Omni at which real video elapsed timing to change what into what (e.g. 'From 0.4s to 1.0s, ensure the man's trench coat remains consistent dark brown and keep the umbrella continuously visible in his left hand'). Format timing in real video seconds (e.g. 'From 0.4s to 1.2s' or 'At t=0.8s'). DO NOT use frame index numbers as elapsed seconds (e.g. NEVER say '00:03' or 'at 3 seconds' if the defect was observed on Frame 3 at 0.6s)."
                         },
                         "timestamp_range": {
                             "type": "string",
-                            "description": "The exact timing where the defect occurs (e.g. '00:01 - 00:03' or '00:02 - 00:04')."
+                            "description": "The exact timing in real video elapsed seconds where the defect occurs (e.g. '0.4s - 1.0s' or '1.5s - 2.2s', or 'Whole Clip'). NEVER use frame indices as seconds."
                         },
                         "related_claims": {
                             "type": "array",
@@ -368,10 +414,22 @@ def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str
     system_instruction = """You are a senior VFX Supervisor and AI Cinematography Director.
 You evaluate the verification ledger of a generated video take and formulate targeted, conversational tweak suggestions for Gemini Omni.
 
+CRITICAL REAL-TIME TIMESTAMP DIRECTIVE (ABSOLUTELY NO FRAME NUMBER CONFUSION):
+- Frame numbers (e.g. Frame 1, Frame 2, Frame 5) ARE NOT ELAPSED SECONDS!
+  In generative video evaluation, frames are sampled densely (~5 frames per second, or every ~0.20s).
+  Therefore, Frame 1 is at ~0.2s, Frame 5 is at ~1.0s, Frame 10 is at ~2.0s, and Frame 15 is at ~3.0s.
+- You MUST NEVER write "00:05" or "5 seconds" for Frame 5! In a 4-second video take, a 5th second does not exist!
+- NEVER write "At 00:01-00:03" if the defect is observed across Frame 1 to Frame 3 — Frame 1 to 3 is actually at 0.2s - 0.6s!
+- Always inspect `real_defect_video_timestamp` and `sampled_frames_evidence` in each failure item.
+- Always output timestamps in real elapsed seconds:
+  * For timestamp_range: e.g. "0.2s - 0.6s", "1.2s - 2.0s", "t=0.8s", or "Whole Clip".
+  * In issue: e.g. "From 0.2s to 0.6s, the character's face morphs..."
+  * In tweak_instruction: e.g. "From 0.2s to 0.6s, ensure the man's trench coat remains consistent dark brown..."
+
 CRITICAL INSTRUCTION REQUIREMENTS:
-1. POINT OUT THE EXACT CURRENT MISTAKE: In `issue`, do NOT write vague summaries like "lighting inconsistency" or "action mismatch". You MUST state clearly what the current video did wrong based on the ledger's `observed` and `frame_observations` (e.g., "From t=01s to t=03s, the character's face morphs and the coffee cup vanishes upon touch").
-2. EXPLICIT TIMESTAMP-ANCHORED TWEAK DIRECTIVE: In `tweak_instruction`, you MUST specify the exact timing (e.g., "At 00:01-00:03...") and provide a precise, literal physical change (e.g., "At 00:02-00:04, lower the key light by two stops and ensure the coffee cup remains solid on the table as the right hand firmly grips its handle"). Avoid vague buzzwords like "improve quality", "fix glitch", or "make it more realistic". State the exact subject, position, and physical interaction.
-3. CONCRETE AND SPECIFIC: Do NOT use generic dramatic amplifiers. Provide exact, actionable physical parameters (e.g., "Change the jacket color to crimson red", "Add dense rainfall with puddle ripples") so the model knows precisely what to change.
+1. POINT OUT THE EXACT CURRENT MISTAKE: In `issue`, do NOT write vague summaries like "lighting inconsistency" or "action mismatch". You MUST state clearly what the current video did wrong using real video elapsed seconds (e.g., "From 0.4s to 1.2s, the character's face morphs and the coffee cup vanishes upon touch").
+2. EXPLICIT TIMESTAMP-ANCHORED TWEAK DIRECTIVE: In `tweak_instruction`, specify the real video second timing (e.g., "From 0.4s to 1.2s...") and provide a precise, literal physical change (e.g., "From 0.4s to 1.2s, lower the key light by two stops and ensure the coffee cup remains solid on the table as the right hand firmly grips its handle"). Avoid vague buzzwords like "improve quality", "fix glitch", or "make it more realistic". State the exact subject, position, and physical interaction.
+3. CONCRETE AND SPECIFIC: Do NOT use generic dramatic amplifiers. Provide exact, actionable physical parameters (e.g., "Change the jacket color to crimson red", "Add dense rainfall with puddle ripples").
 4. CHOOSE THE PROPER FIX MODE (`fix_mode`):
    - Set to `tweak` for incremental changes that can be layered on top of existing footage (e.g. lighting adjustments, color grading, rain/fog/weather density, atmosphere, minor surface textures).
    - Set to `reshoot` for structural motion synthesis failures (e.g. topological continuity breaks, body parts or objects vanishing/morphing, actions that never physically occurred, physics violations). These defects cannot be healed by video-to-video editing and require reshooting with prompt correction.
@@ -385,10 +443,10 @@ CRITICAL INSTRUCTION REQUIREMENTS:
 Director's Prior Guided Choices:
 {json.dumps(director_choices or {}, ensure_ascii=False, indent=2)}
 
-Verification Ledger:
-{json.dumps(ledger or [], ensure_ascii=False, indent=2)}
+Verification Failure Items (with Verified Real-Time Timestamps):
+{json.dumps(enriched_failures, ensure_ascii=False, indent=2)}
 
-Analyze the verification failures, identify the exact timestamps and visible defects from the ledger's frame observations, and produce 1-4 timestamp-anchored, surgical tweak instructions."""
+Analyze the verification failures, use the verified real video timestamps (NOT frame indices) and visible defects from the ledger's frame observations, and produce 1-4 timestamp-anchored, surgical tweak instructions."""
 
     def _execute():
         client = settings.get_genai_client()
@@ -406,7 +464,36 @@ Analyze the verification failures, identify the exact timestamps and visible def
     response = _call_with_retry(_execute)
 
     try:
-        return json.loads(response.text)
+        data = json.loads(response.text)
+        # Safety post-processor: if any suggestion still reverted to 00:0X MM:SS format,
+        # replace with the actual verified real-second window from enriched_failures.
+        import re
+        for sug in data.get("suggestions", []):
+            ts_range = str(sug.get("timestamp_range", "")).strip()
+            rel = sug.get("related_claims", [])
+            matched_windows = [
+                ef["real_defect_video_timestamp"]
+                for ef in enriched_failures
+                if (ef.get("claim_id") in rel or any(ef.get("claim_type") == r for r in rel))
+                and ef.get("real_defect_video_timestamp") not in ("", "Whole Clip")
+            ]
+            primary_window = matched_windows[0] if matched_windows else (enriched_failures[0]["real_defect_video_timestamp"] if enriched_failures else "")
+
+            if primary_window and primary_window != "Whole Clip":
+                # If timestamp_range looks like 00:0X or is missing, correct it
+                if not ts_range or re.search(r"00:\d{2}", ts_range):
+                    sug["timestamp_range"] = primary_window
+                # Fix tweak_instruction if it starts with At 00:XX or Between 00:XX
+                ti = sug.get("tweak_instruction", "")
+                if re.search(r"00:\d{2}", ti):
+                    ti_fixed = re.sub(r'^(At|From|Between)\s+00:\d{2}(\s*[-–to]+\s*00:\d{2})?,?\s*', f"From {primary_window}, ", ti, flags=re.IGNORECASE)
+                    sug["tweak_instruction"] = ti_fixed
+                # Fix issue if it starts with 00:XX
+                iss = sug.get("issue", "")
+                if re.search(r"00:\d{2}", iss):
+                    iss_fixed = re.sub(r'^(At|From|Between)\s+00:\d{2}(\s*[-–to]+\s*00:\d{2})?,?\s*', f"From {primary_window}, ", iss, flags=re.IGNORECASE)
+                    sug["issue"] = iss_fixed
+        return data
     except Exception as e:
         print(f"[PromptDirector] Failed to parse suggest_tweaks response: {e}")
         return {"suggestions": []}

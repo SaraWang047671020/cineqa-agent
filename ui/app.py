@@ -1093,6 +1093,8 @@ with col2:
                 for r in take["ledger"]:
                     icon = "✅" if r.get("verdict") == "MATCH" else "❌"
                     with st.expander(f"{icon} {r['claim_text']}", expanded=True):
+                        if r.get("defect_time_window") and r.get("defect_time_window") != "Whole Clip":
+                            st.markdown(f"**⏱️ Defect Timing:** `{r['defect_time_window']}`")
                         st.markdown(f"**🧐 Causal Analysis:** {r.get('event_causal_order', 'N/A')}")
                         st.markdown(f"**🎥 Frame Observations:** {r.get('frame_observations', 'N/A')}")
                 
