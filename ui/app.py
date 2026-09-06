@@ -807,16 +807,22 @@ with col2:
             with st.container(border=True):
                 st.markdown("##### 💬 Conversational Fine-Tuning")
                 if inter_id:
+                    mode_options = [
+                        "🎬 Reshoot with Tweak (Regenerate with correction)",
+                        "✂️ Surgical In-Place Edit (Precise minimal edit)"
+                    ]
+                    if f"pending_tweak_mode_{idx}" in st.session_state:
+                        p_mode = st.session_state.pop(f"pending_tweak_mode_{idx}")
+                        st.session_state[f"tweak_mode_{idx}"] = (
+                            mode_options[1] if p_mode == "tweak" else mode_options[0]
+                        )
+
                     tweak_mode = st.radio(
-                        "Fine-Tuning Impact Mode",
-                        options=[
-                            "🎬 Reshoot with Tweak (High Impact / Visibly Distinct)",
-                            "✂️ Surgical In-Place Edit (Subtle V2V Patch)"
-                        ],
-                        index=0,
+                        "Fine-Tuning Execution Mode",
+                        options=mode_options,
                         key=f"tweak_mode_{idx}",
                         horizontal=True,
-                        help="Reshoot creates a clearly distinct take integrating your correction with the storyboard keyframe anchor. Surgical In-Place Edit applies latent video-to-video diffusion directly onto the source footage."
+                        help="Reshoot creates a new take integrating the correction with the storyboard keyframe anchor. Surgical In-Place Edit applies a precise minimal edit directly onto the source footage."
                     )
                     col_t1, col_t2 = st.columns([3, 1], vertical_alignment="bottom")
                     with col_t1:
@@ -827,7 +833,7 @@ with col2:
                             "Fine-tune this take with one or more instructions",
                             key=f"tweak_input_{idx}",
                             height=75,
-                            placeholder="e.g., Change jacket color to bright red; Add heavy pouring rain with lightning reflections in puddles"
+                            placeholder="e.g., Lower key light by two stops; Add heavy rain with water dripping from the character's hooded brim"
                         )
                     with col_t2:
                         tweak_btn = st.button("✨ Apply Tweak", key=f"tweak_btn_{idx}", type="primary", use_container_width=True)
@@ -835,9 +841,9 @@ with col2:
                     if tweak_btn and tweak_cmd.strip():
                         is_reshoot = tweak_mode.startswith("🎬")
                         spinner_msg = (
-                            f"Omni reshooting Take {take['take_num']} with high-impact correction..."
+                            f"Omni reshooting Take {take['take_num']} with correction..."
                             if is_reshoot
-                            else f"Omni performing surgical in-place edit on Take {take['take_num']}..."
+                            else f"Omni performing precise surgical edit on Take {take['take_num']}..."
                         )
                         with st.spinner(spinner_msg):
                             try:
@@ -845,12 +851,13 @@ with col2:
                                 original_scene = st.session_state.get("director_final", st.session_state.get("original_prompt", ""))
                                 
                                 if is_reshoot:
-                                    # High-impact reshoot: ground to storyboard keyframe + inject explicit director correction
+                                    # Reshoot: ground to storyboard keyframe + inject explicit director correction
                                     full_tweak_prompt = (
                                         f"{original_scene}\n\n"
                                         f"[DIRECTOR'S CORRECTION FOR THIS TAKE]:\n"
-                                        f"Execute this mandatory change with high visual prominence and bold contrast: {tweak_cmd.strip()}.\n"
-                                        f"Ensure this correction is clearly noticeable and prominently featured throughout the footage."
+                                        f"{tweak_cmd.strip()}\n\n"
+                                        f"Where this correction conflicts with the original description above, "
+                                        f"the correction takes precedence. Everything else stays as described."
                                     )
                                     res = generate_video(
                                         prompt=full_tweak_prompt,
@@ -861,12 +868,19 @@ with col2:
                                         use_live_veo=live_veo
                                     )
                                 else:
-                                    # Surgical V2V edit: clean, assertive prompt without diluting continuity constraints
+                                    # Surgical V2V edit: precise minimal edit preserving original intent and shot continuity
                                     full_tweak_prompt = (
-                                        f"MANDATORY VIDEO MODIFICATION DIRECTIVE:\n"
-                                        f"Visibly and noticeably transform the attached video.\n"
-                                        f"Execute this change with high visual prominence and physical contrast: {tweak_cmd.strip()}.\n"
-                                        f"Make sure this change is immediately distinguishable from the original clip on screen."
+                                        f"You are performing a precise, minimal edit on the attached video.\n\n"
+                                        f"ORIGINAL SHOT INTENT (preserve this):\n{original_scene}\n\n"
+                                        f"THE ONLY CHANGE TO MAKE:\n{tweak_cmd.strip()}\n\n"
+                                        f"PRESERVATION RULES — as important as the change itself:\n"
+                                        f"- Keep the same subject, wardrobe, and physical appearance.\n"
+                                        f"- Keep the same camera framing, movement, and shot size.\n"
+                                        f"- Keep the same staging and the timing of the action.\n"
+                                        f"- Keep the same environment, set dressing, and background.\n"
+                                        f"- Change nothing that the instruction above does not explicitly require.\n\n"
+                                        f"Apply the change consistently across the entire clip. "
+                                        f"Do not restyle, re-light, or re-stage anything else."
                                     )
                                     res = generate_video(
                                         prompt=full_tweak_prompt,
@@ -1067,6 +1081,9 @@ with col2:
                                 if st.button("📋 Paste All Suggestions", key=f"paste_all_{idx}", use_container_width=True):
                                     all_instructions = [s.get("tweak_instruction", "").strip() for s in sugs if s.get("tweak_instruction")]
                                     st.session_state[f"pending_tweak_input_{idx}"] = "; ".join(all_instructions)
+                                    # If any suggestion requires reshoot, set mode to reshoot
+                                    has_reshoot = any(s.get("fix_mode") == "reshoot" for s in sugs)
+                                    st.session_state[f"pending_tweak_mode_{idx}"] = "reshoot" if has_reshoot else "tweak"
                                     for s in sugs:
                                         if s.get("suggestion_id"):
                                             def _bg_update_paste_all(s_id=s.get("suggestion_id")):
@@ -1089,6 +1106,12 @@ with col2:
                                 "low": "🟢 Low / May be intentional"
                             }.get(sug.get("severity", "medium"), "🟡 Medium")
 
+                            fix_mode = sug.get("fix_mode", "tweak")
+                            if fix_mode == "reshoot":
+                                mode_badge = "🎬 **Recommended Mode: Reshoot** (Structural motion/continuity break — cannot be patched via V2V, needs regeneration)"
+                            else:
+                                mode_badge = "✂️ **Recommended Mode: Surgical Edit** (Incremental fix — suitable for direct V2V edit on existing footage)"
+
                             tweak_text = sug.get("tweak_instruction", "").strip()
                             already_in_box = tweak_text in current_box_text if current_box_text else False
 
@@ -1097,6 +1120,7 @@ with col2:
                                 with col_sug_text:
                                     ts_badge = f"⏱️ `{sug.get('timestamp_range', 'Whole Clip')}`"
                                     st.markdown(f"**⚠️ Current Defect:** {sug.get('issue', '')} &nbsp; {ts_badge} &nbsp; `{severity_badge}`")
+                                    st.caption(mode_badge)
                                     if sug.get("related_claims"):
                                         st.caption(f"Related claims: {', '.join(sug.get('related_claims', []))}")
                                     st.markdown("**🎯 Surgical Tweak Directive:**")
@@ -1115,6 +1139,7 @@ with col2:
                                         else:
                                             merged_val = tweak_text
                                         st.session_state[f"pending_tweak_input_{idx}"] = merged_val
+                                        st.session_state[f"pending_tweak_mode_{idx}"] = fix_mode
                                         st.session_state[f"last_pasted_sug_id_{idx}"] = sug.get("suggestion_id")
                                         st.session_state[f"last_pasted_text_{idx}"] = tweak_text
                                         # Update ClickHouse was_pasted
@@ -1126,7 +1151,7 @@ with col2:
                                                 pass
                                         import threading
                                         threading.Thread(target=_bg_update_paste, daemon=True).start()
-                                        st.success("Tweak updated in input box!")
+                                        st.success(f"Tweak updated in box with {fix_mode.upper()} mode selected!")
                                         st.rerun()
 
                 if is_latest:

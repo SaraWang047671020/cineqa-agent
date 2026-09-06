@@ -345,9 +345,14 @@ def suggest_tweaks(ledger: list[dict], director_choices: dict, final_prompt: str
                             "type": "string",
                             "enum": ["high", "medium", "low"],
                             "description": "Severity of this defect: high (critical physics/action breaks), medium (styling/lighting inconsistency), low (potential intentional choice or minor artifact)."
+                        },
+                        "fix_mode": {
+                            "type": "string",
+                            "enum": ["tweak", "reshoot"],
+                            "description": "Use 'tweak' for changes that can be applied on top of the existing footage (lighting, color, weather, atmosphere, minor staging). Use 'reshoot' for defects rooted in how the motion itself was generated (topological continuity, an action that never physically happened, objects appearing or vanishing) — these cannot be repaired by editing and need regeneration."
                         }
                     },
-                    "required": ["issue", "tweak_instruction", "timestamp_range", "related_claims", "severity"]
+                    "required": ["issue", "tweak_instruction", "timestamp_range", "related_claims", "severity", "fix_mode"]
                 }
             }
         },
@@ -359,11 +364,14 @@ You evaluate the verification ledger of a generated video take and formulate tar
 
 CRITICAL INSTRUCTION REQUIREMENTS:
 1. POINT OUT THE EXACT CURRENT MISTAKE: In `issue`, do NOT write vague summaries like "lighting inconsistency" or "action mismatch". You MUST state clearly what the current video did wrong based on the ledger's `observed` and `frame_observations` (e.g., "From t=01s to t=03s, the character's face morphs and the coffee cup vanishes upon touch").
-2. EXPLICIT TIMESTAMP-ANCHORED TWEAK DIRECTIVE: In `tweak_instruction`, you MUST specify the exact timing (e.g., "At 00:01-00:03...") and provide a precise, literal physical change (e.g., "At 00:02-00:04, keep the coffee cup solid on the wooden table and show the right hand firmly gripping its handle without clipping or dissolving"). Avoid vague buzzwords like "improve quality", "fix glitch", or "make it more realistic". State the exact subject, position, and physical interaction.
-3. BOLD VISUAL CONTRAST: Frame instructions with strong, visually prominent verbs (e.g., "Replace X with Y", "Transform X into Y", "Dramatically increase...", "Clearly render..."). Ensure the fix will produce an obvious, unmistakable visual delta on screen.
-4. LANGUAGE: All output MUST be strictly in clear English.
-5. RESPECT INTENTIONAL CHOICES: Cross-reference `director_choices`. Do not flag intentional stylistic or camera choices as defects unless they violate fundamental continuity or physics.
-6. LIMIT & DEDUPLICATE: Merge related root causes. Provide 1 to 4 distinct, high-impact suggestions, sorted by severity.
+2. EXPLICIT TIMESTAMP-ANCHORED TWEAK DIRECTIVE: In `tweak_instruction`, you MUST specify the exact timing (e.g., "At 00:01-00:03...") and provide a precise, literal physical change (e.g., "At 00:02-00:04, lower the key light by two stops and ensure the coffee cup remains solid on the table as the right hand firmly grips its handle"). Avoid vague buzzwords like "improve quality", "fix glitch", or "make it more realistic". State the exact subject, position, and physical interaction.
+3. CONCRETE AND SPECIFIC: Do NOT use generic dramatic amplifiers. Provide exact, actionable physical parameters (e.g., "Change the jacket color to crimson red", "Add dense rainfall with puddle ripples") so the model knows precisely what to change.
+4. CHOOSE THE PROPER FIX MODE (`fix_mode`):
+   - Set to `tweak` for incremental changes that can be layered on top of existing footage (e.g. lighting adjustments, color grading, rain/fog/weather density, atmosphere, minor surface textures).
+   - Set to `reshoot` for structural motion synthesis failures (e.g. topological continuity breaks, body parts or objects vanishing/morphing, actions that never physically occurred, physics violations). These defects cannot be healed by video-to-video editing and require reshooting with prompt correction.
+5. LANGUAGE: All output MUST be strictly in clear English.
+6. RESPECT INTENTIONAL CHOICES: Cross-reference `director_choices`. Do not flag intentional stylistic or camera choices as defects unless they violate fundamental continuity or physics.
+7. LIMIT & DEDUPLICATE: Merge related root causes. Provide 1 to 4 distinct suggestions, sorted by severity.
 """
 
     prompt_content = f"""Final Shot Prompt: {final_prompt}
