@@ -720,8 +720,8 @@ with col1:
         with st.expander("See Breakdown"):
             st.json(st.session_state.get("director_breakdown", {}))
             
-        if st.button("Next: Generate Keyframes", type="primary", use_container_width=True):
-            with st.spinner("Generating 3 candidate keyframes via Gemini Flash Image (parallel)..."):
+        if st.button("🎬 Next: Generate First Frame (生成起點首幀)", type="primary", use_container_width=True):
+            with st.spinner("Generating 3 candidate First Frames (首幀候選) via Gemini Flash Image (parallel)..."):
                 from engine.storyboard import generate_storyboard
                 from concurrent.futures import ThreadPoolExecutor
                 with ThreadPoolExecutor(max_workers=3) as executor:
@@ -732,7 +732,8 @@ with col1:
                 st.rerun()
 
     elif step == "keyframe":
-        st.markdown('<div class="step-header"><span class="step-badge" style="background: linear-gradient(135deg, #EC4899, #8B5CF6);">STEP 4</span><span>Select Opening Anchor Keyframe</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="step-header"><span class="step-badge" style="background: linear-gradient(135deg, #EC4899, #8B5CF6);">STEP 4</span><span>Select Opening First Frame (選擇起點首幀)</span></div>', unsafe_allow_html=True)
+        st.info("💡 **起點首幀 (First Frame / I2V) 定義**：此步驟生成並選定的是影片第 0 秒的「起點首幀」。影片生成模型 (Gemini Omni) 將嚴格以此畫面作為開端連續運鏡與演繹動作，確保人物外觀、光影與場景構圖在第 0 秒完全鎖定。")
         kfs = st.session_state.get("director_keyframes", [])
         num_cols = max(len(kfs), 1)
         cols = st.columns(num_cols)
@@ -744,7 +745,7 @@ with col1:
                         is_mock = True
                     st.image(kf_path, use_container_width=True)
                 else:
-                    st.markdown(f'<div style="background: #111726; border: 1px dashed #EF4444; border-radius: 8px; padding: 20px; text-align: center; color: #F87171;">Keyframe #{idx+1} unavailable</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="background: #111726; border: 1px dashed #EF4444; border-radius: 8px; padding: 20px; text-align: center; color: #F87171;">First Frame #{idx+1} unavailable</div>', unsafe_allow_html=True)
 
                 if is_mock:
                     st.caption("⚠️ 網路超時備用幀 (Simulated Fallback)")
@@ -752,13 +753,13 @@ with col1:
                 c_sel, c_reg = st.columns([1.3, 1])
                 with c_sel:
                     btn_type = "primary" if not is_mock else "secondary"
-                    if st.button(f"Select #{idx+1}", key=f"sel_{idx}", type=btn_type, use_container_width=True):
+                    if st.button(f"Select as First Frame #{idx+1} (選為起點首幀)", key=f"sel_{idx}", type=btn_type, use_container_width=True):
                         st.session_state["director_selected_kf"] = kf_path
                         st.session_state["director_step"] = "video"
                         st.rerun()
                 with c_reg:
-                    if st.button("🔄 Re-roll", key=f"reroll_{idx}", use_container_width=True, help=f"Regenerate candidate #{idx+1}"):
-                        with st.spinner(f"Regenerating Keyframe #{idx+1}..."):
+                    if st.button("🔄 Re-roll", key=f"reroll_{idx}", use_container_width=True, help=f"Regenerate First Frame candidate #{idx+1}"):
+                        with st.spinner(f"Regenerating First Frame #{idx+1}..."):
                             from engine.storyboard import generate_storyboard
                             res = generate_storyboard(prompt=st.session_state["director_final"], use_live_imagen=live_veo)
                             st.session_state["director_keyframes"][idx] = res.get("image_path")
@@ -766,8 +767,8 @@ with col1:
                     
         col_b1, col_b2 = st.columns([1, 1])
         with col_b1:
-            if st.button("🔄 Regenerate All 3 Candidates", use_container_width=True):
-                with st.spinner("Generating 3 new candidates in parallel..."):
+            if st.button("🔄 Regenerate All 3 First Frame Candidates (重新生成所有首幀)", use_container_width=True):
+                with st.spinner("Generating 3 new First Frame candidates in parallel..."):
                     from engine.storyboard import generate_storyboard
                     from concurrent.futures import ThreadPoolExecutor
                     with ThreadPoolExecutor(max_workers=3) as executor:
@@ -776,19 +777,23 @@ with col1:
                     st.session_state["director_keyframes"] = new_kfs
                     st.rerun()
         with col_b2:
-            if st.button("✏️ Back to Edit Prompt", use_container_width=True):
+            if st.button("✏️ Back to Edit Prompt (返回修改提示詞)", use_container_width=True):
                 st.session_state["director_step"] = "assembled"
                 st.rerun()
 
     elif step == "video":
         st.markdown('<div class="step-header"><span class="step-badge" style="background: linear-gradient(135deg, #10B981, #059669);">STEP 5</span><span>Ready for Omni Production Engine</span></div>', unsafe_allow_html=True)
-        st.image(st.session_state["director_selected_kf"], caption="Selected Visual Reference Keyframe", use_container_width=True)
-        st.success("Ready to generate video using Gemini Omni Flash Preview!")
+        st.image(st.session_state["director_selected_kf"], caption="Selected Opening First Frame (已鎖定起點首幀 - 第 0 秒)", use_container_width=True)
+        st.success("✅ 已鎖定起點首幀！影片將由 Gemini Omni 以 Image-to-Video (I2V) 模式從此幀連續展開動態生成。")
         
         if st.button("🎬 Generate Initial Take (Gemini Omni)", type="primary", use_container_width=True):
             with st.spinner("Generating Video..."):
                 from engine.generator import generate_video
-                final_prompt = "Reference the attached visual image for character appearance, scene environment, and cinematic lighting style. Generate dynamic cinematic motion matching the script:\n\n" + st.session_state["director_final"]
+                final_prompt = (
+                    "The attached image is the EXACT FIRST FRAME (Frame 0, starting state) of the video shot. "
+                    "Seamlessly animate the cinematic motion and camera forward directly from this starting frame matching the script:\n\n"
+                    + st.session_state["director_final"]
+                )
 
                 try:
                     gen_res = generate_video(
@@ -862,7 +867,7 @@ with col2:
                         options=mode_options,
                         key=f"tweak_mode_{idx}",
                         horizontal=True,
-                        help="Reshoot creates a new take integrating the correction with the storyboard keyframe anchor. Surgical In-Place Edit applies a precise minimal edit directly onto the source footage."
+                        help="Reshoot creates a new take integrating the correction with the opening first frame anchor. Surgical In-Place Edit applies a precise minimal edit directly onto the source footage."
                     )
                     col_t1, col_t2 = st.columns([3, 1], vertical_alignment="bottom")
                     with col_t1:
