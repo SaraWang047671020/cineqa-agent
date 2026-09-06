@@ -722,11 +722,20 @@ with col1:
             
         if st.button("🎬 Next: Generate First Frame (生成起點首幀)", type="primary", use_container_width=True):
             with st.spinner("Generating 3 candidate First Frames (首幀候選) via Gemini Flash Image (parallel)..."):
+                import engine.storyboard
+                importlib.reload(engine.storyboard)
                 from engine.storyboard import generate_storyboard
                 from concurrent.futures import ThreadPoolExecutor
                 with ThreadPoolExecutor(max_workers=3) as executor:
                     futures = [executor.submit(generate_storyboard, prompt=final_prompt, is_first_frame=True, use_live_imagen=live_veo) for _ in range(3)]
-                    kfs = [f.result().get("image_path") for f in futures]
+                    kfs = []
+                    for f in futures:
+                        try:
+                            res = f.result()
+                            kfs.append(res.get("image_path") if isinstance(res, dict) else str(res))
+                        except Exception as _e:
+                            print(f"[CineQA] Storyboard generation error: {_e}")
+                            kfs.append(None)
                 st.session_state["director_keyframes"] = kfs
                 st.session_state["director_step"] = "keyframe"
                 st.rerun()
@@ -760,20 +769,31 @@ with col1:
                 with c_reg:
                     if st.button("🔄 Re-roll", key=f"reroll_{idx}", use_container_width=True, help=f"Regenerate First Frame candidate #{idx+1}"):
                         with st.spinner(f"Regenerating First Frame #{idx+1}..."):
+                            import engine.storyboard
+                            importlib.reload(engine.storyboard)
                             from engine.storyboard import generate_storyboard
                             res = generate_storyboard(prompt=st.session_state["director_final"], is_first_frame=True, use_live_imagen=live_veo)
-                            st.session_state["director_keyframes"][idx] = res.get("image_path")
+                            st.session_state["director_keyframes"][idx] = res.get("image_path") if isinstance(res, dict) else str(res)
                             st.rerun()
                     
         col_b1, col_b2 = st.columns([1, 1])
         with col_b1:
             if st.button("🔄 Regenerate All 3 First Frame Candidates (重新生成所有首幀)", use_container_width=True):
                 with st.spinner("Generating 3 new First Frame candidates in parallel..."):
+                    import engine.storyboard
+                    importlib.reload(engine.storyboard)
                     from engine.storyboard import generate_storyboard
                     from concurrent.futures import ThreadPoolExecutor
                     with ThreadPoolExecutor(max_workers=3) as executor:
                         futures = [executor.submit(generate_storyboard, prompt=st.session_state["director_final"], is_first_frame=True, use_live_imagen=live_veo) for _ in range(3)]
-                        new_kfs = [f.result().get("image_path") for f in futures]
+                        new_kfs = []
+                        for f in futures:
+                            try:
+                                res = f.result()
+                                new_kfs.append(res.get("image_path") if isinstance(res, dict) else str(res))
+                            except Exception as _e:
+                                print(f"[CineQA] Storyboard generation error: {_e}")
+                                new_kfs.append(None)
                     st.session_state["director_keyframes"] = new_kfs
                     st.rerun()
         with col_b2:
