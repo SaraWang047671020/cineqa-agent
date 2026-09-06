@@ -749,13 +749,13 @@ with col1:
 
     elif step == "video":
         st.markdown('<div class="step-header"><span class="step-badge" style="background: linear-gradient(135deg, #10B981, #059669);">STEP 5</span><span>Ready for Omni Production Engine</span></div>', unsafe_allow_html=True)
-        st.image(st.session_state["director_selected_kf"], caption="Selected Opening Frame", use_container_width=True)
+        st.image(st.session_state["director_selected_kf"], caption="Selected Visual Reference Keyframe", use_container_width=True)
         st.success("Ready to generate video using Gemini Omni Flash Preview!")
         
         if st.button("🎬 Generate Initial Take (Gemini Omni)", type="primary", use_container_width=True):
             with st.spinner("Generating Video..."):
                 from engine.generator import generate_video
-                final_prompt = "The first attached image is the OPENING frame of this shot. Generate the motion that begins from exactly this frame.\n\n" + st.session_state["director_final"]
+                final_prompt = "Reference the attached visual image for character appearance, scene environment, and cinematic lighting style. Generate dynamic cinematic motion matching the script:\n\n" + st.session_state["director_final"]
 
                 try:
                     gen_res = generate_video(

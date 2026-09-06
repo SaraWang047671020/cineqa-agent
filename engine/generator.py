@@ -297,11 +297,12 @@ def generate_video(
                     if prompt:
                         inputs.append({"type": "text", "text": prompt})
                     
-                    # Auto-detect task
+                    # Auto-detect task: Treat provided image as reference image for style & character grounding
                     if source_video_path and os.path.exists(source_video_path):
                         task = "edit"
                     elif first_frame_path and os.path.exists(first_frame_path):
-                        task = "image_to_video"
+                        # Treat the storyboard keyframe as a reference image for dynamic motion
+                        task = "reference_to_video"
                     elif reference_images:
                         task = "reference_to_video"
                     else:
