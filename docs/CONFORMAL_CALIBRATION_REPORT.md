@@ -62,5 +62,4 @@ From the calibrated Split-Conformal (LAC) quantiles, the system establishes the 
 
 The calibrated `ConformalJudge` is integrated directly into [`engine/verify.py`](file:///C:/dev/hackathon/cineqa_agent/engine/verify.py):
 * `call_gemini_verify_with_consensus()` automatically passes vote distributions through `_conformal_judge.evaluate_verdict()`.
-* Sets `prediction_set`, `conformal_set_size`, and `conformal_autonomous` fields on every ledger entry.
-* OpenTelemetry automatically records `CONFORMAL_SET_SIZE_HISTOGRAM` and `UNCERTAIN_VERDICTS_COUNTER` for live Grafana observability!
+* OpenTelemetry and ClickHouse automatically record `CONFORMAL_SET_SIZE_HISTOGRAM` and `UNCERTAIN_VERDICTS_COUNTER` for live studio audit observability!

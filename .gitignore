@@ -10,7 +10,6 @@ env/
 
 # GCP Credentials & Secrets
 *.json
-!grafana/dashboards/*.json
 gcp-key.json
 service_account*.json
 

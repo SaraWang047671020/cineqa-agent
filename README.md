@@ -1,7 +1,7 @@
 # CineQA Studio: Agentic Cinema Quality & Observability Platform 🎬
 
-> **Agentic Cinema Hackathon (Google Cloud & Grafana Labs Track)**  
-> Autonomous AI Quality Assurance & Observability for AI Film Production that turns video hallucinations into director-grade cinema using **Google Cloud Vertex AI (Veo 3.1 & Omni)**, **Gemini 2.5/3.6 Multimodal Vision**, **Split-Conformal Prediction (LAC)**, **ClickHouse Cloud**, and **Grafana Dashboards**.
+> **Agentic Cinema Hackathon (Google Cloud Track)**  
+> Autonomous AI Quality Assurance & Observability for AI Film Production that turns video hallucinations into director-grade cinema using **Google Cloud Vertex AI (Veo 3.1 & Omni)**, **Gemini 2.5/3.6 Multimodal Vision**, **Split-Conformal Prediction (LAC)**, and **ClickHouse Cloud**.
 
 ---
 
@@ -43,7 +43,7 @@
        └───────────────────────────┬───────────────────────────┘
                                    │ (OTel, Metrics & Logs)
        ┌───────────────────────────▼───────────────────────────┐
-       │   6. ClickHouse & Grafana Studio Observability        │
+       │   6. ClickHouse Studio Observability & Telemetry      │
        │   (Real-time Audit Ledger, GPU Hours Saved, Radars)   │
        └───────────────────────────────────────────────────────┘
 ```
@@ -71,8 +71,8 @@
    - Drives Google Cloud Vertex AI Omni Interactions API in Video-to-Video (V2V) edit mode to heal flaws while preserving visual identity.
 
 5. **Enterprise Observability**:
-   - Real-time logging of verification claims and remediation lineage to **ClickHouse Cloud**.
-   - Prometheus metrics and Grafana dashboards tracking hallucination frequency, latency, and GPU compute cost savings.
+   - Real-time logging of verification claims, prompt lineage, and latency to **ClickHouse Cloud**.
+   - Built-in studio analytics tracking hallucination frequency, latency, and GPU compute cost savings.
 
 ---
 
@@ -112,7 +112,7 @@ python -m streamlit run ui/app.py
 - **Foundation Models**: Google Veo 3.1 Fast, Google Omni (Interactions API), Google Gemini 2.5 / 3.6 Flash & Pro
 - **Cloud Infrastructure**: Google Cloud Vertex AI, Cloud Storage
 - **Uncertainty Quantification**: Split-Conformal Prediction (Distribution-Free Non-Conformity Scoring)
-- **Database & Telemetry**: ClickHouse Cloud, Prometheus, OpenTelemetry, Grafana
+- **Database & Telemetry**: ClickHouse Cloud, Prometheus, OpenTelemetry
 - **Computer Vision**: OpenCV, FFmpeg-Python, PIL
 - **Application Framework**: Streamlit (Python)
 
