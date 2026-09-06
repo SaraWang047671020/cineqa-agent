@@ -725,7 +725,7 @@ with col1:
                 from engine.storyboard import generate_storyboard
                 from concurrent.futures import ThreadPoolExecutor
                 with ThreadPoolExecutor(max_workers=3) as executor:
-                    futures = [executor.submit(generate_storyboard, prompt=final_prompt, use_live_imagen=live_veo) for _ in range(3)]
+                    futures = [executor.submit(generate_storyboard, prompt=final_prompt, is_first_frame=True, use_live_imagen=live_veo) for _ in range(3)]
                     kfs = [f.result().get("image_path") for f in futures]
                 st.session_state["director_keyframes"] = kfs
                 st.session_state["director_step"] = "keyframe"
@@ -761,7 +761,7 @@ with col1:
                     if st.button("🔄 Re-roll", key=f"reroll_{idx}", use_container_width=True, help=f"Regenerate First Frame candidate #{idx+1}"):
                         with st.spinner(f"Regenerating First Frame #{idx+1}..."):
                             from engine.storyboard import generate_storyboard
-                            res = generate_storyboard(prompt=st.session_state["director_final"], use_live_imagen=live_veo)
+                            res = generate_storyboard(prompt=st.session_state["director_final"], is_first_frame=True, use_live_imagen=live_veo)
                             st.session_state["director_keyframes"][idx] = res.get("image_path")
                             st.rerun()
                     
@@ -772,7 +772,7 @@ with col1:
                     from engine.storyboard import generate_storyboard
                     from concurrent.futures import ThreadPoolExecutor
                     with ThreadPoolExecutor(max_workers=3) as executor:
-                        futures = [executor.submit(generate_storyboard, prompt=st.session_state["director_final"], use_live_imagen=live_veo) for _ in range(3)]
+                        futures = [executor.submit(generate_storyboard, prompt=st.session_state["director_final"], is_first_frame=True, use_live_imagen=live_veo) for _ in range(3)]
                         new_kfs = [f.result().get("image_path") for f in futures]
                     st.session_state["director_keyframes"] = new_kfs
                     st.rerun()

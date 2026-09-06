@@ -17,31 +17,46 @@ def generate_storyboard(
     aspect_ratio: str = "16:9",
     use_live_imagen: bool = True,
     model_name: str = "gemini-2.5-flash-image",
-    out_dir: str = "temp_eval/storyboards"
+    out_dir: str = "temp_eval/storyboards",
+    is_first_frame: bool = True
 ) -> Dict[str, Any]:
     """
-    Generates a pre-flight keyframe using Gemini 2.5 Flash Image.
+    Generates a pre-flight opening first frame or keyframe using Gemini 2.5 Flash Image.
     """
     out_path_dir = Path(os.path.abspath(out_dir))
     out_path_dir.mkdir(parents=True, exist_ok=True)
     
     import uuid
     timestamp = int(time.time())
-    local_out_path = str(out_path_dir / f"keyframe_{timestamp}_{uuid.uuid4().hex[:6]}.jpg")
+    file_prefix = "first_frame" if (is_first_frame and not base_image_path) else "keyframe"
+    local_out_path = str(out_path_dir / f"{file_prefix}_{timestamp}_{uuid.uuid4().hex[:6]}.jpg")
     error_msg = None
 
     with tracer.start_as_current_span("Storyboard.generate"):
         if use_live_imagen:
             try:
-                print(f"[CineQA Keyframe] Launching live generation via {model_name}...")
+                frame_type_label = "FIRST FRAME (t=0.0s)" if (is_first_frame and not base_image_path) else "KEYFRAME"
+                print(f"[CineQA Storyboard] Launching live {frame_type_label} generation via {model_name}...")
                 
                 # Gemini 3 Pro Image is hosted in the 'global' region, while 2.5 Flash is in us-central1
                 loc_override = "global"
                 client = settings.get_genai_client(location_override=loc_override)
                 
                 full_prompt = prompt
+                if is_first_frame and not base_image_path:
+                    first_frame_directive = (
+                        "[CINEMATOGRAPHIC DIRECTIVE — OPENING FIRST FRAME (t=0.0s)]:\n"
+                        "You are generating the EXACT OPENING FIRST FRAME (Frame 0, starting state) of this cinematic shot for an Image-to-Video engine.\n"
+                        "- Render the INITIAL STARTING POSE and position of all characters and elements right before the action commences.\n"
+                        "- Establish the opening camera framing, composition, depth of field, perspective, and lighting atmosphere.\n"
+                        "- Keep the subject in a clean, poised starting state ready to animate (do NOT render mid-action motion blur or post-action aftermath).\n"
+                        "- Crisp, photorealistic detail with sharp edges so the video model can seamlessly anchor and animate continuous motion forward from t=0.0s.\n\n"
+                        "SCENE DESCRIPTION:\n"
+                    )
+                    full_prompt = first_frame_directive + prompt
+
                 if negative_prompt:
-                    full_prompt = f"{prompt}\n\nDo not include: {negative_prompt}"
+                    full_prompt = f"{full_prompt}\n\nDo not include: {negative_prompt}"
 
                 config = GenerateContentConfig(
                     response_modalities=["IMAGE"],
