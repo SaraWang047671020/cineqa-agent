@@ -32,13 +32,13 @@ Follow these strict scientific guidelines:
 3. **SSPO (Stage-Specific Prompt Optimization) Routing Table**:
    You MUST classify each failed claim by its `type` in the ledger and apply the EXACT corresponding Prompt Modification Strategy below (Operationalizing RAPO++):
       - IF type in ("action", "state"):
-       [Strategy: Micro-Geometrical Transformation & Shot Sequencing] Video models lack the conceptual "world model" of complex physical destruction. You MUST explicitly dictate the exact geometrical changes and assign them to specific seconds/shots. Use VFX terminology ("breakaway prop"). Format strictly as: "00:00-00:01 (Shot 1: The Setup): [Describe solid geometry and position]. 00:01-00:02 (Shot 2: The Fracture): [Describe the exact geometrical breaking, e.g., the solid rectangle violently splits into jagged flying polygons and splinters]. 00:02-00:04 (Shot 3: The Aftermath): [Describe final resting position, e.g., the largest jagged chunk flies backward and rests flat against the background wall]."
+       [Strategy: Micro-Geometrical Transformation & Shot Sequencing] Video models lack the conceptual "world model" of complex physical destruction. You MUST explicitly dictate the exact geometrical changes and assign them to specific seconds/shots. Use VFX terminology ("breakaway prop"). Format strictly in real elapsed seconds: "t=0.0s-1.0s (Shot 1: The Setup): [Describe solid geometry and position]. t=1.0s-2.0s (Shot 2: The Fracture): [Describe the exact geometrical breaking, e.g., the solid rectangle violently splits into jagged flying polygons and splinters]. t=2.0s-4.0s (Shot 3: The Aftermath): [Describe final resting position, e.g., the largest jagged chunk flies backward and rests flat against the background wall]." NEVER use 00:XX format.
        
      - IF type in ("relative_position", "direction"):
        [Strategy: Absolute Coordinate Anchoring & Camera Vector Forcing] Video models struggle with relative spatial verbs like "running down" or "beside". You MUST explicitly constrain the CAMERA ANGLE (e.g., "high-angle shot looking down") and the SUBJECT'S FACING DIRECTION. Use strict viewer-centric coordinates ("viewer-left", "foreground-right").
        • Screen-Space Traversal Claims (CRITICAL): If the failed claim requires the subject to move "left to right" / "right to left" / cross the screen, you MUST:
          1. In [Camera & Optics], explicitly state: "static locked-off camera, fixed frame, camera does NOT pan, track, or follow the subject" — UNLESS the original prompt explicitly called for a tracking shot, in which case instead state the subject's motion must be visibly faster/larger than the camera's pan so net screen-space displacement still occurs.
-         2. In [Action & Causal Trajectory], state an explicit start/end screen-space percentage and timing using timestamp-level shot blocking. Format strictly as: "00:00-00:01 (Shot 1: Entry): [subject enters at screen-left X:10%]. 00:01-00:03 (Shot 2: Traversal): [subject traverses to screen-right X:90%, independent of any camera motion]".
+         2. In [Action & Causal Trajectory], state an explicit start/end screen-space percentage and timing using timestamp-level shot blocking. Format strictly as: "t=0.0s-1.0s (Shot 1: Entry): [subject enters at screen-left X:10%]. t=1.0s-3.0s (Shot 2: Traversal): [subject traverses to screen-right X:90%, independent of any camera motion]".
          3. Add to the Negative Prompt: "camera tracking shot, panning camera following subject, subject remains centered while background moves, static subject position".
        Add incorrect positions/camera angles to the Negative Prompt.
 
@@ -52,7 +52,7 @@ Follow these strict scientific guidelines:
        [Strategy: Aesthetic Weight Forcing & Negative Filtering] Video models determine style heavily by the first few words and negative prompts. You MUST prepend the exact stylistic keywords (e.g., "Studio Ghibli style 2D anime", "Cel-shaded flat colors") at the absolute beginning of the positive prompt. You MUST add contradictory styles to the negative prompt (e.g., "photorealistic, live-action, 3D CGI, volumetric rendering").
      
    - IF tier == "tier1_causal_action" OR temporal == "sequential":
-     [Strategy: Chronological State Forcing] Enforce rigid temporal flow using explicit state transitions: "00:00 (Initial): [State A]. 00:01 (Action): [State B]. 00:03 (Final Result): [State C with explicit positions]." Suppress "reversed causal direction" or "simultaneous actions" in the Negative Prompt.
+     [Strategy: Chronological State Forcing] Enforce rigid temporal flow using explicit state transitions: "t=0.0s (Initial): [State A]. t=1.0s (Action): [State B]. t=3.0s (Final Result): [State C with explicit positions]." Suppress "reversed causal direction" or "simultaneous actions" in the Negative Prompt. NEVER use 00:XX format.
 
 5. **CRITICAL PRESERVATION RULE (ANTI-HALLUCINATION)**:
    DO NOT alter any geometries, directions, or entities that are not explicitly marked as MISMATCH in the ledger. If the original prompt specifies 'running downward', 'left to right', etc., you MUST preserve these exact spatial and directional intents. Never flip directions (e.g., down to up, left to right) unless explicitly told the original was wrong.
@@ -212,6 +212,25 @@ class PromptRemediatorAgent:
             except Exception as e:
                 print(f"[Remediator] Fallback JSON parsing failed: {e}")
                 result = {"refined_positive_prompt": original_prompt, "negative_prompt": ""}
+
+            # Sanitize all outputs to eliminate any residual MM:SS or hallucinated seconds
+            try:
+                from agents.prompt_director import clean_timestamp_string
+                if "refined_positive_prompt" in result and isinstance(result["refined_positive_prompt"], str):
+                    result["refined_positive_prompt"] = clean_timestamp_string(result["refined_positive_prompt"])
+                if "structured_prompt_breakdown" in result and isinstance(result["structured_prompt_breakdown"], dict):
+                    for k, v in result["structured_prompt_breakdown"].items():
+                        if isinstance(v, str):
+                            result["structured_prompt_breakdown"][k] = clean_timestamp_string(v)
+                if "targeted_token_surgery" in result and isinstance(result["targeted_token_surgery"], list):
+                    for s in result["targeted_token_surgery"]:
+                        if isinstance(s, dict):
+                            if "repaired_phrase" in s and isinstance(s["repaired_phrase"], str):
+                                s["repaired_phrase"] = clean_timestamp_string(s["repaired_phrase"])
+                            if "rationale" in s and isinstance(s["rationale"], str):
+                                s["rationale"] = clean_timestamp_string(s["rationale"])
+            except Exception as e:
+                print(f"[Remediator] Timestamp sanitization warning: {e}")
 
             elapsed = time.time() - start_time
             REMEDIATION_DURATION_SECONDS.observe(elapsed)

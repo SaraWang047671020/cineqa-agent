@@ -916,6 +916,8 @@ with col2:
                         tweak_btn = st.button("✨ Apply Tweak", key=f"tweak_btn_{idx}", type="primary", use_container_width=True)
 
                     if tweak_btn and tweak_cmd.strip():
+                        from agents.prompt_director import clean_timestamp_string
+                        clean_cmd = clean_timestamp_string(tweak_cmd.strip())
                         is_reshoot = tweak_mode.startswith("🎬")
                         spinner_msg = (
                             f"Omni reshooting Take {take['take_num']} with correction from First Frame..."
@@ -934,7 +936,7 @@ with col2:
                                         f"Seamlessly animate the cinematic motion and camera forward directly from this starting frame, incorporating the director's correction below:\n\n"
                                         f"{original_scene}\n\n"
                                         f"[DIRECTOR'S CORRECTION FOR THIS TAKE]:\n"
-                                        f"{tweak_cmd.strip()}\n\n"
+                                        f"{clean_cmd}\n\n"
                                         f"Where this correction conflicts with the original description above, "
                                         f"the correction takes precedence. Everything else stays as described."
                                     )
@@ -950,7 +952,7 @@ with col2:
                                     # Surgical V2V edit: direct assertive edit directive (no conflicting negative preservation rules)
                                     full_tweak_prompt = (
                                         f"[MANDATORY VIDEO EDIT INSTRUCTION]:\n"
-                                        f"{tweak_cmd.strip()}\n\n"
+                                        f"{clean_cmd}\n\n"
                                         f"[EDIT EXECUTION DIRECTIVE]:\n"
                                         f"Apply the edit instruction above visibly, clearly, and prominently to the attached video. "
                                         f"Transform the video footage to noticeably reflect this correction across the clip while maintaining core subject and environment identity."
@@ -966,7 +968,7 @@ with col2:
                                 new_take = len(st.session_state["take_history"]) + 1
                                 st.session_state["take_history"].append({
                                     "take_num": new_take,
-                                    "prompt": f"[Tweak from Take {take['take_num']}]: {tweak_cmd}",
+                                    "prompt": f"[Tweak from Take {take['take_num']}]: {clean_cmd}",
                                     "video_path": res["video_path"],
                                     "ledger": None,
                                     "remediated_plan": None,
@@ -1119,7 +1121,7 @@ with col2:
                     if "tweak_suggestions" not in take:
                         with st.spinner("Analyzing verification ledger and synthesizing tweak recommendations..."):
                             try:
-                                from agents.prompt_director import suggest_tweaks
+                                from agents.prompt_director import suggest_tweaks, clean_timestamp_string
                                 choices_dict = {}
                                 for ans in st.session_state.get("director_answered", []):
                                     choices_dict[ans.get("axis")] = ans.get("chosen_fragment")
@@ -1132,6 +1134,9 @@ with col2:
                                 import uuid
                                 for s in raw_sug:
                                     s["suggestion_id"] = str(uuid.uuid4())[:8]
+                                    s["issue"] = clean_timestamp_string(s.get("issue", ""))
+                                    s["tweak_instruction"] = clean_timestamp_string(s.get("tweak_instruction", ""))
+                                    s["timestamp_range"] = clean_timestamp_string(str(s.get("timestamp_range", "0.0s - 4.0s (Whole Clip)")))
                                 take["tweak_suggestions"] = raw_sug
 
                                 # Optional ClickHouse Logging
@@ -1160,7 +1165,8 @@ with col2:
                         with col_hdr2:
                             if len(sugs) > 1:
                                 if st.button("📋 Paste All Suggestions", key=f"paste_all_{idx}", use_container_width=True):
-                                    all_instructions = [s.get("tweak_instruction", "").strip() for s in sugs if s.get("tweak_instruction")]
+                                    from agents.prompt_director import clean_timestamp_string
+                                    all_instructions = [clean_timestamp_string(s.get("tweak_instruction", "")).strip() for s in sugs if s.get("tweak_instruction")]
                                     st.session_state[f"pending_tweak_input_{idx}"] = "; ".join(all_instructions)
                                     # If any suggestion requires reshoot, set mode to reshoot
                                     has_reshoot = any(s.get("fix_mode") == "reshoot" for s in sugs)
@@ -1181,6 +1187,7 @@ with col2:
                         current_box_text = st.session_state.get(f"tweak_input_{idx}", "").strip()
 
                         for s_idx, sug in enumerate(sugs):
+                            from agents.prompt_director import clean_timestamp_string
                             severity_badge = {
                                 "high": "🔴 High Severity",
                                 "medium": "🟡 Medium Severity",
@@ -1193,14 +1200,16 @@ with col2:
                             else:
                                 mode_badge = "✂️ **Recommended Mode: Surgical Edit** (Incremental fix — suitable for direct V2V edit on existing footage)"
 
-                            tweak_text = sug.get("tweak_instruction", "").strip()
+                            tweak_text = clean_timestamp_string(sug.get("tweak_instruction", "").strip())
                             already_in_box = tweak_text in current_box_text if current_box_text else False
 
                             with st.container(border=True):
                                 col_sug_text, col_sug_btn = st.columns([3, 1], vertical_alignment="center")
                                 with col_sug_text:
-                                    ts_badge = f"⏱️ `{sug.get('timestamp_range', 'Whole Clip')}`"
-                                    st.markdown(f"**⚠️ Current Defect:** {sug.get('issue', '')} &nbsp; {ts_badge} &nbsp; `{severity_badge}`")
+                                    cleaned_ts = clean_timestamp_string(str(sug.get('timestamp_range', '0.0s - 4.0s (Whole Clip)')))
+                                    ts_badge = f"⏱️ `{cleaned_ts}`"
+                                    cleaned_issue = clean_timestamp_string(sug.get('issue', ''))
+                                    st.markdown(f"**⚠️ Current Defect:** {cleaned_issue} &nbsp; {ts_badge} &nbsp; `{severity_badge}`")
                                     st.caption(mode_badge)
                                     if sug.get("related_claims"):
                                         st.caption(f"Related claims: {', '.join(sug.get('related_claims', []))}")
