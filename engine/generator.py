@@ -62,12 +62,20 @@ def _get_access_token() -> str:
         try:
             if _cached_auth_creds is None:
                 sa_json = os.getenv("GCP_SERVICE_ACCOUNT_KEY")
+                sa_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
                 if sa_json:
                     import json
                     from google.oauth2 import service_account
                     sa_info = json.loads(sa_json)
                     creds = service_account.Credentials.from_service_account_info(
                         sa_info,
+                        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+                    )
+                    _cached_auth_creds = creds
+                elif sa_path and os.path.exists(sa_path):
+                    from google.oauth2 import service_account
+                    creds = service_account.Credentials.from_service_account_file(
+                        sa_path,
                         scopes=["https://www.googleapis.com/auth/cloud-platform"]
                     )
                     _cached_auth_creds = creds

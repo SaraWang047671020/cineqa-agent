@@ -11,13 +11,12 @@ def _call_with_retry(func, max_retries: int = 3, delay: float = 1.5):
         except Exception as e:
             last_err = e
             err_msg = str(e).lower()
-            if "metadata.google.internal" in err_msg or "computemetadata" in err_msg:
+            if "metadata.google.internal" in err_msg or "computemetadata" in err_msg or "compute engine metadata" in err_msg:
                 # GCE metadata server unreachable (e.g. running on Streamlit Cloud or external container)
                 print(f"[PromptDirector] GCE metadata server unreachable: {e}. Forcing fallback to GEMINI_API_KEY...")
-                settings.USE_VERTEX_AI = False
-                settings._clients.clear()
+                settings.force_disable_vertex()
                 if attempt < max_retries - 1:
-                    time.sleep(0.5)
+                    time.sleep(0.3)
                     continue
             is_transient = any(k in err_msg for k in ["transport", "nameresolutionerror", "11001", "getaddrinfo", "timeout", "connection", "remotedisconnected", "temporarily unavailable"])
             if attempt < max_retries - 1 and is_transient:

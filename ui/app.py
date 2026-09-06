@@ -26,10 +26,11 @@ if "telemetry_initialized" not in st.session_state:
     st.session_state["telemetry_initialized"] = True
     def _bg_init_telemetry():
         try:
-            from telemetry.metrics import init_bq_table
-            import google.auth
-            _, project = google.auth.default()
-            if project:
+            project = settings.GOOGLE_CLOUD_PROJECT
+            sa_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+            sa_key = os.getenv("GCP_SERVICE_ACCOUNT_KEY")
+            if project and ((sa_path and os.path.exists(sa_path)) or sa_key):
+                from telemetry.metrics import init_bq_table
                 init_bq_table(project)
         except Exception:
             pass
@@ -521,10 +522,28 @@ with col1:
                     st.rerun()
         
         if st.session_state.get("director_error"):
-            st.error(f"⚠️ 連線至 Google 雲端服務時發生暫時性中斷 (Temporary network/DNS glitch):\n\n`{st.session_state['director_error']}`")
-            if st.button("🔄 重試連線 (Retry Connection)", type="primary"):
-                st.session_state.pop("director_error", None)
-                st.rerun()
+            st.error(f"⚠️ 連線至 Google 雲端服務時發生中斷或配置異常:\n\n`{st.session_state['director_error']}`")
+            col_retry, col_force_key = st.columns([1, 1])
+            with col_retry:
+                if st.button("🔄 重試連線 (Retry Connection)", type="primary"):
+                    st.session_state.pop("director_error", None)
+                    st.rerun()
+            with col_force_key:
+                if st.button("⚡ 切換至 Gemini API Key 直連模式"):
+                    settings.force_disable_vertex()
+                    st.session_state.pop("director_error", None)
+                    st.rerun()
+            
+            if not settings.GEMINI_API_KEY:
+                st.warning("🔑 系統尚未檢測到 `GEMINI_API_KEY`。請在下方輸入您的 Gemini API Key：")
+                custom_key = st.text_input("輸入 Gemini API Key (以 AIzaSy 開頭):", type="password", key="inline_gemini_key_input")
+                if custom_key:
+                    os.environ["GEMINI_API_KEY"] = custom_key.strip()
+                    st.session_state["gemini_api_key"] = custom_key.strip()
+                    settings.force_disable_vertex()
+                    st.session_state.pop("director_error", None)
+                    st.success("API Key 已成功套用！")
+                    st.rerun()
 
         # Enforce max questions at UI level
         elif len(answered) >= 4:

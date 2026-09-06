@@ -4,77 +4,117 @@ from google import genai
 
 load_dotenv()
 
-# If running on Streamlit Cloud, inject st.secrets into environment variables
-try:
-    import streamlit as st
-    if hasattr(st, "secrets"):
-        for k, v in st.secrets.items():
-            if isinstance(v, (str, int, float, bool)):
-                os.environ.setdefault(k, str(v))
-except Exception:
-    pass
+def _get_secret_val(key_names: list[str], default: str = "") -> str:
+    """
+    Robust secret lookup supporting os.environ, st.session_state, and
+    hierarchical/flat st.secrets on Streamlit Cloud.
+    """
+    # 1. os.environ
+    for k in key_names:
+        val = os.getenv(k)
+        if val:
+            return val
+
+    # 2. st.session_state (runtime user overrides)
+    try:
+        import streamlit as st
+        if hasattr(st, "session_state"):
+            for k in key_names:
+                v = st.session_state.get(k.lower()) or st.session_state.get(k)
+                if v:
+                    return str(v).strip()
+    except Exception:
+        pass
+
+    # 3. st.secrets (flat & nested)
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets"):
+            for k in key_names:
+                if k in st.secrets:
+                    return str(st.secrets[k]).strip()
+                if k.lower() in st.secrets:
+                    return str(st.secrets[k.lower()]).strip()
+            # Recursive check in sections (e.g. [general], [gemini], [gcp])
+            def _walk(d):
+                for dk, dv in d.items():
+                    if dk.lower() in [x.lower() for x in key_names] and isinstance(dv, (str, int, float, bool)):
+                        return str(dv).strip()
+                    if isinstance(dv, dict) or hasattr(dv, "items"):
+                        res = _walk(dict(dv))
+                        if res:
+                            return res
+                return None
+            found = _walk(dict(st.secrets))
+            if found:
+                return found
+    except Exception:
+        pass
+
+    return default
+
 
 class Settings:
-    # Google Cloud / Vertex AI Settings
-    GOOGLE_CLOUD_PROJECT: str = os.getenv("GOOGLE_CLOUD_PROJECT", "")
-    GOOGLE_CLOUD_LOCATION: str = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
-    USE_VERTEX_AI: bool = os.getenv("USE_VERTEX_AI", "false").lower() in ("true", "1", "yes")
-
-    # Google AI Studio API Key
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-
-    # Model configuration
-    DEFAULT_GEMINI_MODEL: str = os.getenv("DEFAULT_GEMINI_MODEL", "gemini-3.6-flash")
+    _clients: dict = {}
+    _lock = None
+    _force_disable_vertex: bool = False
 
     # Observability & Split-Conformal (LAC) Settings
     PROMETHEUS_PORT: int = int(os.getenv("PROMETHEUS_PORT", "8000"))
     CONFIDENCE_LEVEL_ALPHA: float = float(os.getenv("CONFIDENCE_LEVEL_ALPHA", "0.10"))  # 90% confidence
     HIGH_UNCERTAINTY_THRESHOLD: float = float(os.getenv("HIGH_UNCERTAINTY_THRESHOLD", "20.0"))
+    DEFAULT_GEMINI_MODEL: str = os.getenv("DEFAULT_GEMINI_MODEL", "gemini-3.6-flash")
 
-    _clients: dict = {}
-    _lock = None
+    @property
+    def GEMINI_API_KEY(self) -> str:
+        return _get_secret_val(["GEMINI_API_KEY", "GOOGLE_API_KEY", "gemini_api_key", "google_api_key"])
+
+    @property
+    def GOOGLE_CLOUD_PROJECT(self) -> str:
+        return _get_secret_val(["GOOGLE_CLOUD_PROJECT", "GCP_PROJECT", "GCLOUD_PROJECT", "project_id"])
+
+    @property
+    def GOOGLE_CLOUD_LOCATION(self) -> str:
+        return _get_secret_val(["GOOGLE_CLOUD_LOCATION", "GCP_LOCATION", "location"], default="global")
+
+    @property
+    def USE_VERTEX_AI(self) -> bool:
+        if self._force_disable_vertex:
+            return False
+        val = _get_secret_val(["USE_VERTEX_AI", "use_vertex_ai"], default="false").lower()
+        return val in ("true", "1", "yes")
+
+    def force_disable_vertex(self):
+        """Forces fallback to Gemini API Key and flushes client cache."""
+        self._force_disable_vertex = True
+        self._clients.clear()
 
     def get_genai_client(self, location_override: str = None) -> genai.Client:
         """
         Automatically initializes and caches the GenAI Client based on environment.
-        Gracefully falls back to Gemini API Key if Vertex AI or metadata service is unavailable.
+        Guarantees ZERO hangs on http://metadata.google.internal by never invoking
+        google.auth.default() when GEMINI_API_KEY is available or when running outside GCE.
         """
         import threading
         if self._lock is None:
             self._lock = threading.Lock()
 
         loc = location_override or self.GOOGLE_CLOUD_LOCATION
-        
-        # Determine whether Vertex AI can and should be used
+
+        sa_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        sa_key = _get_secret_val(["GCP_SERVICE_ACCOUNT_KEY", "gcp_service_account_key"])
+        has_explicit_sa = bool((sa_path and os.path.exists(sa_path)) or sa_key)
+
+        # Only use Vertex AI if explicitly requested AND an explicit service account key is available,
+        # OR if no Gemini API Key is provided at all and explicit SA exists.
         use_vertex = False
-        if self.USE_VERTEX_AI and self.GOOGLE_CLOUD_PROJECT:
-            sa_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-            sa_key = os.getenv("GCP_SERVICE_ACCOUNT_KEY")
-            if (sa_path and os.path.exists(sa_path)) or sa_key:
-                use_vertex = True
-            else:
-                try:
-                    import google.auth
-                    from google.auth.compute_engine import credentials as ce_creds
-                    creds, _ = google.auth.default()
-                    # If creds is a ComputeEngineCredentials, verify we are not in an external environment (e.g. Streamlit Cloud)
-                    if isinstance(creds, ce_creds.Credentials):
-                        if self.GEMINI_API_KEY:
-                            # Avoid 3-second metadata.google.internal connect timeouts on non-GCE hosts
-                            print("[CineQA] Non-GCE environment detected; using GEMINI_API_KEY instead of Compute Engine metadata.")
-                            use_vertex = False
-                        else:
-                            use_vertex = True
-                    else:
-                        use_vertex = True
-                except Exception as e:
-                    print(f"[CineQA] google.auth.default() failed: {e}. Using GEMINI_API_KEY.")
-                    use_vertex = False
-        elif self.GOOGLE_CLOUD_PROJECT and not self.GEMINI_API_KEY:
+        if self.USE_VERTEX_AI and self.GOOGLE_CLOUD_PROJECT and has_explicit_sa:
+            use_vertex = True
+        elif not self.GEMINI_API_KEY and self.GOOGLE_CLOUD_PROJECT and has_explicit_sa:
             use_vertex = True
 
         cache_key = (use_vertex, self.GOOGLE_CLOUD_PROJECT, loc, self.GEMINI_API_KEY)
-        
+
         with self._lock:
             if cache_key in self._clients:
                 return self._clients[cache_key]
@@ -97,6 +137,7 @@ class Settings:
                     print("[CineQA] Initializing Google GenAI client via Gemini API Key")
                     client = genai.Client(api_key=self.GEMINI_API_KEY)
                 else:
+                    print("[CineQA] Warning: No GEMINI_API_KEY found; attempting default client")
                     client = genai.Client()
 
             self._clients[cache_key] = client
