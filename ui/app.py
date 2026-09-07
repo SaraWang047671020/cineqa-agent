@@ -39,6 +39,8 @@ from telemetry.metrics import TAKES_TOTAL, INSPECTION_DURATION_SECONDS, HUMAN_RE
 from engine.pipeline import run_pipeline, stream_pipeline
 from engine.generator import generate_video
 from agents.remediator import PromptRemediatorAgent
+import agents.prompt_director
+importlib.reload(agents.prompt_director)
 
 st.set_page_config(page_title="CineQA Studio", layout="wide", page_icon="🎬")
 
@@ -1063,20 +1065,94 @@ with col2:
                     if tweak_mode.startswith("✂️"):
                         st.caption("ℹ️ **In-Place Edit (V2V) Tip**: This mode modifies pixels directly on the source footage, ideal for color grading, lighting, or atmosphere. **Video models cannot hallucinate new skeletal motion, character blocking, or camera moves onto existing pixels**. To fix motion or camera action, choose '🎬 **Reshoot with Correction**'!")
 
-                    col_t1, col_t2 = st.columns([3, 1], vertical_alignment="bottom")
-                    with col_t1:
-                        tweak_cmd = st.text_area(
-                            "Tell Omni what to change in one sentence (Fine-Tuning Instruction)",
-                            key=f"tweak_input_{idx}",
-                            height=75,
-                            placeholder="e.g., Accelerate character walking pace; or Lower key light by two stops (One change at a time works best)"
-                        )
-                    with col_t2:
-                        tweak_btn = st.button("✨ Apply Tweak", key=f"tweak_btn_{idx}", type="primary", use_container_width=True)
+                    # 1. User types casual instruction in text_area
+                    tweak_cmd = st.text_area(
+                        "Tell Omni what to change in one sentence (Fine-Tuning Instruction)",
+                        key=f"tweak_input_{idx}",
+                        height=75,
+                        placeholder="e.g., Accelerate character walking pace; or Lower key light by two stops (One change at a time works best)"
+                    )
 
-                    if tweak_btn and tweak_cmd.strip():
+                    col_opt_btn, _ = st.columns([1.5, 2.5])
+                    with col_opt_btn:
+                        if st.button("✨ 優化並預覽 (Optimize & Preview)", key=f"opt_btn_{idx}", type="primary", use_container_width=True):
+                            if tweak_cmd.strip():
+                                with st.spinner("Cinematographer optimizing instruction with preservation clauses..."):
+                                    from agents.prompt_director import optimize_tweak_instruction
+                                    choices_dict = {}
+                                    for ans in st.session_state.get("director_answered", []):
+                                        choices_dict[ans.get("axis")] = ans.get("chosen_fragment")
+                                    original_scene = st.session_state.get("director_final", st.session_state.get("original_prompt", ""))
+                                    opt_res = optimize_tweak_instruction(
+                                        user_input=tweak_cmd.strip(),
+                                        director_choices=choices_dict,
+                                        original_prompt=original_scene
+                                    )
+                                    st.session_state[f"tweak_opt_res_{idx}"] = opt_res
+                                    st.session_state[f"tweak_opt_raw_{idx}"] = tweak_cmd.strip()
+                                    st.session_state[f"tweak_opt_edited_{idx}"] = opt_res.get("optimized", tweak_cmd.strip())
+                                    st.rerun()
+
+                    # 2. If optimization result is present, display preview and execution exits
+                    opt_res = st.session_state.get(f"tweak_opt_res_{idx}")
+                    final_instruction_to_send = None
+                    chosen_option_label = None
+
+                    if opt_res:
+                        st.markdown("---")
+                        is_changed = opt_res.get("changed", False)
+                        note_text = opt_res.get("note", "")
+                        preserved_list = opt_res.get("preserved", [])
+                        raw_input = st.session_state.get(f"tweak_opt_raw_{idx}", tweak_cmd.strip())
+
+                        if is_changed:
+                            st.info(f"💡 **Director Note**: {note_text}")
+                            if preserved_list:
+                                chips_html = " ".join([f"<span style='background-color:#1E293B; color:#38BDF8; padding:3px 8px; border-radius:12px; font-size:0.82rem; border:1px solid #334155; margin-right:4px;'>🛡️ {p}</span>" for p in preserved_list])
+                                st.markdown(f"**Preserved Clauses:** {chips_html}", unsafe_allow_html=True)
+
+                            edited_val = st.text_area(
+                                "Optimized Instruction (Editable):",
+                                value=st.session_state.get(f"tweak_opt_edited_{idx}", opt_res.get("optimized", "")),
+                                key=f"tweak_opt_text_edit_{idx}",
+                                height=85
+                            )
+
+                            c_send_opt, c_send_orig, c_reopt = st.columns([1.5, 1.5, 1.2])
+                            with c_send_opt:
+                                if st.button("🚀 用這個送出 (Send Optimized)", key=f"send_opt_{idx}", type="primary", use_container_width=True):
+                                    final_instruction_to_send = edited_val.strip()
+                                    # If user modified the optimized text, mark as 'edited', otherwise 'optimized'
+                                    chosen_option_label = "edited" if (edited_val.strip() != opt_res.get("optimized", "").strip()) else "optimized"
+                            with c_send_orig:
+                                if st.button("↩️ 用我原本寫的送出 (Send Original)", key=f"send_orig_{idx}", use_container_width=True):
+                                    final_instruction_to_send = raw_input
+                                    chosen_option_label = "original"
+                            with c_reopt:
+                                if st.button("🔄 重新優化 (Re-optimize)", key=f"reopt_{idx}", use_container_width=True):
+                                    st.session_state.pop(f"tweak_opt_res_{idx}", None)
+                                    st.session_state.pop(f"tweak_opt_raw_{idx}", None)
+                                    st.session_state.pop(f"tweak_opt_edited_{idx}", None)
+                                    st.rerun()
+                        else:
+                            # changed is false: already precise
+                            st.success(f"✅ **Director Note**: {note_text}")
+                            c_send_direct, c_reopt2 = st.columns([2, 1.2])
+                            with c_send_direct:
+                                if st.button("🚀 直接送出 (Send Instruction)", key=f"send_direct_{idx}", type="primary", use_container_width=True):
+                                    final_instruction_to_send = raw_input or opt_res.get("optimized", "")
+                                    chosen_option_label = "original"
+                            with c_reopt2:
+                                if st.button("🔄 重新輸入 (Reset)", key=f"reset_opt_{idx}", use_container_width=True):
+                                    st.session_state.pop(f"tweak_opt_res_{idx}", None)
+                                    st.session_state.pop(f"tweak_opt_raw_{idx}", None)
+                                    st.session_state.pop(f"tweak_opt_edited_{idx}", None)
+                                    st.rerun()
+
+                    # 3. Execution when an exit button is clicked
+                    if final_instruction_to_send:
                         from agents.prompt_director import clean_timestamp_string
-                        clean_cmd = clean_timestamp_string(tweak_cmd.strip(), duration=vid_duration)
+                        clean_cmd = clean_timestamp_string(final_instruction_to_send, duration=vid_duration)
                         is_reshoot = tweak_mode.startswith("🎬")
                         spinner_msg = (
                             f"Omni reshooting Take {take['take_num']} with correction from First Frame..."
@@ -1089,7 +1165,7 @@ with col2:
                                 original_scene = st.session_state.get("director_final", st.session_state.get("original_prompt", ""))
                                 
                                 if is_reshoot:
-                                    # Reshoot: ground to opening first frame + inject explicit director correction
+                                    # Reshoot: ground to opening first frame + inject director correction (clean, no artificial prominence)
                                     full_tweak_prompt = (
                                         f"The attached image is the EXACT FIRST FRAME (Frame 0, starting state) of the video shot. "
                                         f"Seamlessly animate the cinematic motion and camera forward directly from this starting frame, incorporating the director's correction below:\n\n"
@@ -1108,13 +1184,10 @@ with col2:
                                         use_live_veo=live_veo
                                     )
                                 else:
-                                    # Surgical V2V edit: direct assertive edit directive
+                                    # Surgical V2V edit: minimal framework without visual prominence inflators
                                     full_tweak_prompt = (
-                                        f"[MANDATORY VIDEO EDIT INSTRUCTION]:\n"
-                                        f"{clean_cmd}\n\n"
-                                        f"[EDIT EXECUTION DIRECTIVE]:\n"
-                                        f"Apply the edit instruction above visibly, clearly, and prominently to the attached video. "
-                                        f"Transform the video footage to noticeably reflect this correction across the clip while maintaining core subject and environment identity."
+                                        f"Apply the following change to the attached video, and change nothing else.\n\n"
+                                        f"{clean_cmd}"
                                     )
                                     res = generate_video(
                                         prompt=full_tweak_prompt,
@@ -1136,28 +1209,41 @@ with col2:
                                     "duration": vid_duration
                                 })
                                 
-                                # Reset input box after successful generation
+                                # Clear state for this take
                                 st.session_state[f"tweak_input_{idx}"] = ""
+                                st.session_state.pop(f"tweak_opt_res_{idx}", None)
+                                st.session_state.pop(f"tweak_opt_raw_{idx}", None)
+                                st.session_state.pop(f"tweak_opt_edited_{idx}", None)
 
-                                # Telemetry tracking for guidance_events: tweak_requested
-                                def _bg_log_tweak(cmd=tweak_cmd.strip(), s_id=st.session_state.get("session_id"), s_sum=st.session_state.get("original_prompt", ""), a_asked=[a['axis'] for a in st.session_state.get("director_answered", [])]):
+                                # Telemetry tracking for guidance_events: tweak_submitted
+                                raw_user_text = st.session_state.get(f"tweak_opt_raw_{idx}", tweak_cmd.strip())
+                                def _bg_log_tweak_submit(
+                                    actual_text=clean_cmd,
+                                    orig_text=raw_user_text,
+                                    opt_label=chosen_option_label or "original",
+                                    s_id=st.session_state.get("session_id"),
+                                    s_sum=st.session_state.get("original_prompt", ""),
+                                    a_asked=[a['axis'] for a in st.session_state.get("director_answered", [])]
+                                ):
                                     try:
                                         from agents.prompt_director import infer_tweak_axis
                                         from database.logger import log_guidance_event
-                                        inferred_axis, confidence = infer_tweak_axis(cmd)
+                                        inferred_axis, confidence = infer_tweak_axis(actual_text)
                                         log_guidance_event(
                                             session_id=s_id,
-                                            event_type='tweak_requested',
+                                            event_type='tweak_submitted',
                                             axis=inferred_axis,
-                                            tweak_text=cmd,
+                                            option_label=opt_label,
+                                            option_fragment=orig_text,
+                                            tweak_text=actual_text,
                                             axes_asked=a_asked,
                                             scene_summary=s_sum[:200],
                                             axis_confidence=confidence
                                         )
                                     except Exception as e:
-                                        print(f"[_bg_log_tweak ERROR]: {e}")
+                                        print(f"[_bg_log_tweak_submit ERROR]: {e}")
                                 import threading
-                                threading.Thread(target=_bg_log_tweak, daemon=True).start()
+                                threading.Thread(target=_bg_log_tweak_submit, daemon=True).start()
 
                                 st.success("Fine-tuned take generated successfully!")
                                 st.rerun()

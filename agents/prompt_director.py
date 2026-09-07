@@ -743,4 +743,117 @@ If the instruction is ambiguous, too vague, purely subjective, or spans multiple
         print(f"[infer_tweak_axis ERROR] Failed to infer tweak axis: {e}")
         return ("unknown", 0.0)
 
+def optimize_tweak_instruction(
+    user_input: str,
+    director_choices: dict,
+    original_prompt: str,
+) -> dict:
+    """
+    把使用者隨手寫的微調指令，改寫成給 Omni 用的精準指令，並補上保留條款。
+
+    回傳：
+    {
+      "optimized": str,        # 英文，送給 Omni 的完整指令
+      "changed": bool,         # 是否有實質改寫
+      "note": str,             # 繁體中文，一句話說明做了什麼（或為何不需要改）
+      "preserved": [str]       # 明確要求保留的項目，供 UI 列出
+    }
+    """
+    cleaned_input = str(user_input or "").strip()
+    if not cleaned_input:
+        return {
+            "optimized": "",
+            "changed": False,
+            "note": "未提供微調指令。",
+            "preserved": []
+        }
+
+    try:
+        model = settings.DEFAULT_GEMINI_MODEL
+        schema = {
+            "type": "object",
+            "properties": {
+                "optimized": {
+                    "type": "string",
+                    "description": "The precise English instruction to be sent to Omni. 1-3 sentences plus preservation clauses."
+                },
+                "changed": {
+                    "type": "boolean",
+                    "description": "True if the instruction was substantially rewritten or had preservation clauses added. False if the user instruction was already precise and concrete."
+                },
+                "note": {
+                    "type": "string",
+                    "description": "Traditional Chinese (繁體中文). One concise sentence explaining what was refined or why no change was necessary."
+                },
+                "preserved": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of distinct aspects explicitly preserved (in English phrases, e.g. 'handheld camera instability', 'neon practicals lighting')."
+                }
+            },
+            "required": ["optimized", "changed", "note", "preserved"]
+        }
+
+        system_instruction = """You are a cinematographer translating a director's casual note into a precise instruction for a video generation model. The director has already decided WHAT to change. Your job is only to say it in a way the model will execute correctly.
+
+ABSOLUTE CONSTRAINTS:
+1. PRESERVE THE INTENT EXACTLY. Never change what the director asked for.
+2. NEVER add a change they did not ask for. If they said "darker", do not also make it rain.
+3. NEVER split one change into several. One note in, one change out.
+4. NEVER inflate. The result should be 1-3 sentences plus preservation clauses — not a paragraph.
+
+WHAT YOU MAY DO:
+- Replace vague adjectives with concrete photographic language.
+  "darker" -> "reduce the key light so the subject's face falls into half shadow"
+  "more rain" -> "increase the rain to a heavy downpour with visible streaks across the frame"
+- Add PRESERVATION CLAUSES naming what must stay unchanged. Derive these from the director's
+  earlier choices, provided in `director_choices`. If they chose a handheld camera, the
+  instruction must say to keep the handheld instability — otherwise the model may stabilise it.
+- Use the correct term of art when it makes the instruction more precise, not to sound impressive.
+
+IF THE INSTRUCTION IS ALREADY PRECISE:
+Return it unchanged, set `changed` to false, and say so in `note`.
+Knowing when not to intervene matters. Do not rewrite something that is already clear.
+
+LANGUAGE: `optimized` and `preserved` MUST be English (they are sent to the video model).
+`note` MUST be Traditional Chinese (繁體中文) — it is shown to the user.
+"""
+
+        prompt_payload = (
+            f"Original Scene Prompt:\n{original_prompt}\n\n"
+            f"Director's Prior Guided Choices:\n{json.dumps(director_choices or {}, ensure_ascii=False, indent=2)}\n\n"
+            f"User's Casual Tweak Input:\n{cleaned_input}\n\n"
+            f"Optimize this tweak instruction according to the rules."
+        )
+
+        def _execute():
+            client = settings.get_genai_client()
+            return client.models.generate_content(
+                model=model,
+                contents=[prompt_payload],
+                config=GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    response_mime_type="application/json",
+                    response_schema=schema,
+                    temperature=0.2
+                )
+            )
+
+        response = _call_with_retry(_execute)
+        data = json.loads(response.text)
+        return {
+            "optimized": str(data.get("optimized") or cleaned_input).strip(),
+            "changed": bool(data.get("changed", False)),
+            "note": str(data.get("note") or "").strip(),
+            "preserved": list(data.get("preserved") or [])
+        }
+    except Exception as e:
+        print(f"[PromptDirector] Failed to optimize tweak instruction: {e}")
+        return {
+            "optimized": cleaned_input,
+            "changed": False,
+            "note": "優化器暫時無法連線，將直接使用您輸入的原始指令。",
+            "preserved": []
+        }
+
 
