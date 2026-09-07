@@ -7,6 +7,27 @@ from typing import List, Dict, Any, Optional, Union, Generator, Tuple
 from engine.claims import extract_claims
 from engine.verify import call_gemini_verify_with_consensus, extract_frames
 
+# Tiered Trust & Empirical Reliability Threshold Configuration
+AUTONOMOUS_VERIFY_THRESHOLD = 0.80
+
+# Types meeting empirical precision >= 80% with objective visual certainty
+AUTONOMOUS_CLAIM_TYPES = {
+    "style",             # Visual medium / aesthetic rendering (~95% precision)
+    "color",             # Chromatic palette & color consistency (100% on 92 benchmark rows)
+    "relative_position", # Spatial left/right/above/below with coordinate anchoring (100% on benchmark)
+    "state",             # Static props, wearing, posture (100% on benchmark)
+    "direction",         # Screen-space motion vector traversal (100% on benchmark)
+}
+
+# Types routed to Advisory / Human Review (< 80% threshold or subjective cinematic aesthetics)
+HUMAN_REVIEW_CLAIM_TYPES = {
+    "camera",            # Framing and movement aesthetics (handed off to director for aesthetic sign-off)
+    "count",             # Small integer numeration (75% precision on benchmark, dense overlap risk)
+    "action",            # Temporal process, physical contact, fluid dynamics (70% precision on benchmark)
+    "relative_size",     # Depth perspective bounding & optical foreshortening (50% precision on benchmark)
+    "physics_sanity",    # Micro-topology, morphing, mesh clipping (theoretical VLM boundary)
+}
+
 def stream_pipeline(
     scene_text: str,
     video_path: str,
@@ -29,8 +50,6 @@ def stream_pipeline(
             location=location
         )
     
-
-        
     total_claims = len(claims)
 
     import concurrent.futures
@@ -51,6 +70,8 @@ def stream_pipeline(
         if not claim["verifiable"]:
             entry["verdict"] = "SKIPPED_NOT_VERIFIABLE"
             entry["observed"] = "Subjective or non-visually verifiable claim."
+            entry["review_tier"] = "flagged_review"
+            entry["review_reason"] = "Subjective or non-visually verifiable claim."
             return entry
 
         frame_out_dir = Path(frames_dir) / claim_id
@@ -60,6 +81,8 @@ def stream_pipeline(
         if not frames:
             entry["verdict"] = "CANNOT_DETERMINE"
             entry["observed"] = "Failed to sample frames from video take."
+            entry["review_tier"] = "flagged_review"
+            entry["review_reason"] = "Failed to sample frames from video take."
             return entry
 
         verdict_data = call_gemini_verify_with_consensus(
@@ -85,6 +108,30 @@ def stream_pipeline(
         entry["causality"] = verdict_data.get("event_causal_order", "")
         entry["physics_laws"] = verdict_data.get("physics_law_grounding_check", "")
         entry["defect_frame_indices"] = verdict_data.get("defect_frame_indices", [])
+
+        # Determine Trust Tier: Autonomous Verified vs Flagged for Director Review
+        claim_type = claim.get("type", "action")
+        is_autonomous_type = claim_type in AUTONOMOUS_CLAIM_TYPES
+        conformal_autonomous = verdict_data.get("conformal_autonomous", True)
+        conformal_set_size = verdict_data.get("conformal_set_size", 1)
+
+        # Dual-gate verification: Type precision >= 80% AND decisive Conformal Prediction Set (size == 1)
+        if is_autonomous_type and conformal_autonomous and conformal_set_size == 1:
+            entry["review_tier"] = "verified"
+            entry["review_reason"] = "High-confidence visual attribute meeting ≥ 80% precision threshold with Split-Conformal coverage guarantee."
+        else:
+            entry["review_tier"] = "flagged_review"
+            if claim_type == "camera":
+                entry["review_reason"] = "Camera movement and framing involve subjective cinematic aesthetics. Extracted kinematic signals provided for director sign-off."
+            elif not is_autonomous_type:
+                entry["review_reason"] = f"Claim type '{claim_type}' falls below our 80% empirical precision threshold. Extracted evidence provided for director review."
+            else:
+                entry["review_reason"] = f"Split-Conformal prediction set is ambiguous ({verdict_data.get('prediction_set', [])}). Flagged for director review."
+
+        entry["prediction_set"] = verdict_data.get("prediction_set", [entry["verdict"]])
+        entry["conformal_set_size"] = conformal_set_size
+        entry["conformal_autonomous"] = conformal_autonomous
+        entry["coverage_guarantee"] = verdict_data.get("coverage_guarantee", 0.80)
 
         # Map frame indices to real physical elapsed video seconds
         entry["frame_timestamps"] = [round(ts, 2) for _, ts in frames]

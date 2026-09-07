@@ -76,6 +76,8 @@ def main():
                          help="不呼叫 Gemini，只測試腳本本身的邏輯")
     parser.add_argument("--claim-ids", default=None,
                          help="只跑指定的 claim_id，逗號分隔，例如 c_0016,c_0024（除錯/迭代 prompt 用，省錢）")
+    parser.add_argument("--concurrency", type=int, default=8,
+                         help="並行驗證執行緒數，預設 8（大幅縮短 92 筆評估時間至 1-2 分鐘）")
     parser.add_argument("--force-consensus", action="store_true",
                          help="不管自報信心分數多高，每條 claim 都強制跑滿 3 次獨立呼叫——"
                               "Split-Conformal (LAC) 校準需要真正的共識一致率，用這個 flag 才有乾淨資料可用")
@@ -95,20 +97,35 @@ def main():
         print("標註集裡沒有任何已填 ground_truth_verdict 的列，先照 labeled_set/README.md 標好資料。")
         sys.exit(1)
 
-    print(f"讀到 {len(rows)} 條已標註的 claim{'（dry-run 模式）' if args.dry_run else ''}")
+    print(f"讀到 {len(rows)} 條已標註的 claim{'（dry-run 模式）' if args.dry_run else ''}，使用 {args.concurrency} 並行執行緒加速評測...")
+
+    import concurrent.futures
+    import threading
 
     results = []
-    for row in rows:
+    completed_count = 0
+    lock = threading.Lock()
+    total = len(rows)
+
+    def eval_single_row(row):
+        nonlocal completed_count
+        claim_id = row["claim_id"]
         video_path = Path(args.labels).parent / row["video_path"]
         if not video_path.exists():
-            print(f"⚠️  跳過 {row['claim_id']}：找不到影片檔 {video_path}")
-            continue
+            print(f"⚠️  跳過 {claim_id}：找不到影片檔 {video_path}", flush=True)
+            return None
 
-        frame_out_dir = Path(args.frames_dir) / row["claim_id"]
-        frames = extract_frames(video_path, frame_out_dir, row.get("temporal", "static"), row["claim_id"])
+        frame_out_dir = Path(args.frames_dir) / claim_id
+        # Fast path: if frames already extracted, reuse them to save FFmpeg CPU time
+        existing_frames = sorted(frame_out_dir.glob("*.jpg"))
+        if existing_frames:
+            frames = [(str(p), float(i * 0.5)) for i, p in enumerate(existing_frames)]
+        else:
+            frames = extract_frames(video_path, frame_out_dir, row.get("temporal", "static"), claim_id)
+            
         if not frames:
-            print(f"⚠️  跳過 {row['claim_id']}：抽格失敗")
-            continue
+            print(f"⚠️  跳過 {claim_id}：抽格失敗", flush=True)
+            return None
 
         verdict_data = call_gemini_verify_with_consensus(
             claim_text=row["claim_text"],
@@ -119,12 +136,18 @@ def main():
             temporal=row.get("temporal", "static")
         )
         system_verdict = verdict_data.get("verdict", "CANNOT_DETERMINE")
+        gt = row["ground_truth_verdict"]
 
-        results.append({
-            "claim_id": row["claim_id"],
+        with lock:
+            completed_count += 1
+            mark = "✅" if gt == system_verdict else "❌"
+            print(f"[{completed_count:02d}/{total:02d}] {claim_id:6s} ({row.get('type', 'state'):17s}): GT={gt:16s} 系統={system_verdict:16s} {mark}", flush=True)
+
+        return {
+            "claim_id": claim_id,
             "claim_text": row["claim_text"],
             "claim_type": row.get("type", "state"),
-            "ground_truth": row["ground_truth_verdict"],
+            "ground_truth": gt,
             "system_verdict": system_verdict,
             "observed": verdict_data.get("observed", ""),
             "checkable_components": verdict_data.get("checkable_components", []),
@@ -134,12 +157,26 @@ def main():
             "event_causal_order": verdict_data.get("event_causal_order"),
             "consensus_calls": verdict_data.get("consensus_calls"),
             "consensus_votes": verdict_data.get("consensus_votes"),
-        })
+        }
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as executor:
+        future_to_row = {executor.submit(eval_single_row, r): r for r in rows}
+        for future in concurrent.futures.as_completed(future_to_row):
+            res = future.result()
+            if res:
+                results.append(res)
+
+    results.sort(key=lambda x: x["claim_id"])
+
+    # Auto-save full results to JSON for calibration and analysis
+    result_dump_path = Path(args.labels).parent / "latest_precision_results.json"
+    with open(result_dump_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
+    print(f"\n完整評測結果已自動儲存至: {result_dump_path}")
 
     if not results:
         print("沒有任何一條 claim 完整跑完（可能是影片檔都不存在），先補齊 eval/frames/ 底下的素材。")
         sys.exit(1)
-
     report(results, args.dry_run)
 
     if args.export_calibration:

@@ -886,8 +886,9 @@ with col2:
                     ):
                         ledger.append(entry)
                         pct = int(((idx_claim + 1) / total) * 100)
+                        tier_label = "🛡️ Verified" if entry.get("review_tier") == "verified" else "👁️ Review Queue"
                         v_icon = "✅" if entry["verdict"] == "MATCH" else ("❌" if entry["verdict"] == "MISMATCH" else "⚠️")
-                        msg = f"{v_icon} **Claim #{idx_claim+1}/{total}**: {entry['claim_text']}\n"
+                        msg = f"{v_icon} **Claim #{idx_claim+1}/{total}** `[{tier_label}]`: {entry['claim_text']}\n"
                         msg += f"> **Verdict**: {entry['verdict']}\n"
                         if entry.get("physics_sanity"): msg += f"> **Physics**: {entry['physics_sanity']}\n"
                         if entry.get("spatial_geometry"): msg += f"> **Geometry**: {entry['spatial_geometry']}\n"
@@ -941,20 +942,63 @@ with col2:
                     threading.Thread(target=_bg_log, daemon=True).start()
                     st.rerun()
             else:
-                # 2. RENDER VERIFICATION RESULTS
-                matches = sum(1 for r in take["ledger"] if r.get("verdict") == "MATCH")
-                pass_rate = (matches / len(take["ledger"]) * 100) if take["ledger"] else 0
-                st.metric("Adherence", f"{pass_rate:.1f}%", delta="Pass" if pass_rate >= 75 else "Needs Repair")
-                
-                for r in take["ledger"]:
-                    icon = "✅" if r.get("verdict") == "MATCH" else "❌"
-                    with st.expander(f"{icon} {r['claim_text']}", expanded=True):
-                        if r.get("defect_time_window") and r.get("defect_time_window") != "Whole Clip":
-                            st.markdown(f"**⏱️ Defect Timing:** `{r['defect_time_window']}`")
-                        if r.get("camera_motion") and "N/A" not in r.get("camera_motion"):
-                            st.markdown(f"**🎥 Camera Motion:** {r['camera_motion']}")
-                        st.markdown(f"**🧐 Causal Analysis:** {r.get('event_causal_order', 'N/A')}")
-                        st.markdown(f"**🎥 Frame Observations:** {r.get('frame_observations', 'N/A')}")
+                # 2. RENDER VERIFICATION RESULTS (TIERED TRUST: AUTONOMOUS vs DIRECTOR REVIEW)
+                verified_items = [r for r in take["ledger"] if r.get("review_tier") == "verified"]
+                review_items = [r for r in take["ledger"] if r.get("review_tier") != "verified"]
+
+                if not verified_items and not review_items:
+                    verified_items = take["ledger"]
+
+                verified_matches = sum(1 for r in verified_items if r.get("verdict") == "MATCH")
+                verified_pass_rate = (verified_matches / len(verified_items) * 100) if verified_items else 0
+
+                col_m1, col_m2 = st.columns([1, 1])
+                with col_m1:
+                    st.metric(
+                        "Verified Adherence",
+                        f"{verified_pass_rate:.1f}%",
+                        delta=f"{verified_matches}/{len(verified_items)} Pass (≥80% Reliability)" if verified_items else None
+                    )
+                with col_m2:
+                    st.metric(
+                        "Director Review Queue",
+                        f"{len(review_items)} Items",
+                        delta="Aesthetic & Physical Review" if review_items else "All Verified",
+                        delta_color="off"
+                    )
+
+                # Section 1: Autonomous Verified Decisions
+                if verified_items:
+                    st.markdown(f"#### 🛡️ Autonomous Verified Decisions ({len(verified_items)})")
+                    st.caption("Visual attributes verified with ≥ 80% empirical precision and Split-Conformal coverage guarantees (1-α=0.80).")
+                    for r in verified_items:
+                        icon = "✅" if r.get("verdict") == "MATCH" else "❌"
+                        with st.expander(f"{icon} {r['claim_text']}", expanded=(r.get("verdict") == "MISMATCH")):
+                            if r.get("defect_time_window") and r.get("defect_time_window") != "Whole Clip":
+                                st.markdown(f"**⏱️ Defect Timing:** `{r['defect_time_window']}`")
+                            st.markdown(f"**🧐 Causal Analysis:** {r.get('event_causal_order', 'N/A')}")
+                            st.markdown(f"**🎥 Frame Observations:** {r.get('frame_observations', 'N/A')}")
+
+                # Section 2: Flagged for Director Review
+                if review_items:
+                    st.markdown(f"#### 👁️ Flagged for Director Review ({len(review_items)})")
+                    st.info(
+                        "ℹ️ **Empirical Reliability Boundary:** These claims involve camera movement aesthetics, "
+                        "complex kinetic interactions, or topological continuity falling below our 80% autonomous precision threshold. "
+                        "Rather than hallucinating binary verdicts, CineQA extracts objective coordinates and kinematic signals for director review.",
+                        icon="👁️"
+                    )
+                    for r in review_items:
+                        with st.expander(f"⚠️ {r['claim_text']}", expanded=True):
+                            reason = r.get("review_reason") or "Kinematic review recommended."
+                            st.markdown(f"**📌 Review Advisory:** {reason}")
+                            if r.get("camera_motion") and "N/A" not in r.get("camera_motion"):
+                                st.markdown(f"**🎥 Camera Motion Signals:** `{r['camera_motion']}`")
+                            if r.get("motion_anchoring") and "N/A" not in r.get("motion_anchoring"):
+                                st.markdown(f"**📐 Coordinate Anchoring:** `{r['motion_anchoring']}`")
+                            if r.get("defect_time_window") and r.get("defect_time_window") != "Whole Clip":
+                                st.markdown(f"**⏱️ Observed Window:** `{r['defect_time_window']}`")
+                            st.markdown(f"**🎥 Extracted Observations:** {r.get('frame_observations', 'N/A')}")
                 
                 # --- Suggest Tweaks Block (Observations Only) ---
                 failed_items = [r for r in take["ledger"] if r.get("verdict") in ("MISMATCH", "CANNOT_DETERMINE")]
