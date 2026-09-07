@@ -80,6 +80,7 @@ def stream_pipeline(
         entry["physics_sanity"] = verdict_data.get("physics_and_reality_sanity_check", "")
         entry["spatial_geometry"] = verdict_data.get("spatial_geometry_check", "")
         entry["motion_anchoring"] = verdict_data.get("motion_anchoring_check", "")
+        entry["camera_motion"] = verdict_data.get("camera_motion_check", "")
         entry["frame_obs"] = verdict_data.get("frame_observations", "")
         entry["causality"] = verdict_data.get("event_causal_order", "")
         entry["physics_laws"] = verdict_data.get("physics_law_grounding_check", "")

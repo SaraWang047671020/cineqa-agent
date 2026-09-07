@@ -21,6 +21,38 @@ PROMPT_BASE = """Claim to verify: "{claim_text}"\n\nThe video frames are attache
 
 
 
+BLOCK_CAMERA = """🎥 CAMERA MOVEMENT VERIFICATION (READ THE SIGNALS, DON'T GUESS):
+This claim is about how the CAMERA behaves, not about what the subject does.
+Judging camera motion from sampled frames is possible, but only if you compare the
+right evidence. Use these discriminators:
+
+| Movement          | Background parallax | Subject size | Frame edges |
+|-------------------|---------------------|--------------|-------------|
+| dolly / push-in   | CHANGES — foreground and background shift relative to each other | grows | new content at edges |
+| zoom              | UNCHANGED — everything scales uniformly | grows | content cropped away uniformly |
+| subject walks in  | UNCHANGED — background is static | grows | unchanged |
+| pan / tilt        | whole frame translates | unchanged | new content enters one side |
+| tracking shot     | background flows past | unchanged | subject stays in the same screen position |
+| static locked-off | none — background pixels are fixed | may change if subject moves | unchanged |
+
+PARALLAX IS THE KEY TEST: a dolly and a zoom both make the subject larger, but only a
+dolly changes the relative position of foreground and background elements. If foreground
+and background keep exactly the same relationship while everything scales, it is a zoom,
+not a dolly.
+
+USE THE COMPUTED SIGNALS in the frame labels — they are objective and you must not
+contradict them:
+- `background` high AND `centre` high  -> the whole frame is moving -> the CAMERA moved
+- `background` low  AND `centre` high  -> the camera held still; the SUBJECT moved
+- `background` high AND `centre` low   -> the camera is TRACKING a subject that stays framed
+- `global shift dx/dy` consistently in one direction -> a pan (dx) or tilt (dy) in that direction
+- all values near zero -> a locked-off static camera
+
+Record your reading of these signals in `camera_motion_check`, citing frame numbers.
+If the claim asks for a static camera but `background` values are consistently high,
+that is a MISMATCH. If it asks for a specific move and the signals show a different one,
+say which move actually occurred."""
+
 BLOCK_DIRECTION = """??Motion Direction & Camera Tracking (CRITICAL):
 For directional claims (e.g. 'runs left to right', 'moves top to bottom'), you MUST explicitly compute the screen-space coordinates. 
 If the subject remains centrally framed while the background shifts, they are NOT moving across the screen space, they are just moving in world space! This is a MISMATCH for directional screen-space claims.
@@ -90,6 +122,8 @@ def build_verify_prompt(claim_text: str, claim_type: str, temporal: str, has_ref
     # Physics sanity is a dedicated Tier-0 claim — do not re-run it on every unrelated claim.
     if claim_type == "physics_sanity":
         blocks.append(BLOCK_PHYSICS_SANITY)
+    if claim_type == "camera":
+        blocks.insert(1, BLOCK_CAMERA)
     if claim_type == "action":
         blocks.insert(1, BLOCK_ACTION)
     if claim_type == 'direction':
@@ -152,7 +186,11 @@ VERIFY_RESPONSE_SCHEMA = {
         },
         "motion_anchoring_check": {
             "type": "string",
-            "description": "For motion/direction claims: state subject's screen-space X position at first vs last frame (e.g. 'Subject X: 45%->48%'), AND separately state whether background shifted (camera tracking) between frames. If subject's own X% barely changed while background shifted, verdict MUST be MISMATCH for 'left to right' claims."
+            "description": "State TWO things separately: (a) the SUBJECT's screen-space X position at the first vs last frame (e.g. 'Subject X: 45%->48%'), and (b) whether the BACKGROUND shifted between those frames. Report both as neutral observations. Only apply the rule 'unchanged subject X + shifting background = MISMATCH' when the claim explicitly requires the SUBJECT to traverse the screen (e.g. 'moves from left to right'). For a claim about the CAMERA, do NOT apply that rule — put your camera reasoning in `camera_motion_check` instead."
+        },
+        "camera_motion_check": {
+            "type": "string",
+            "description": "For camera claims: state what the computed signals show (background vs centre motion, global dx/dy), what camera movement that implies, and whether it matches the claim. Cite frame numbers. If this claim is not about the camera, write 'N/A — not a camera claim'."
         },
         "frame_observations": {
             "type": "string",
@@ -193,7 +231,7 @@ VERIFY_RESPONSE_SCHEMA = {
     },
     "required": [
         "checkable_components", "physics_and_reality_sanity_check", "physics_passed", "physics_law_grounding_check", "entity_presence_check", "action_execution_check",
-        "frame_observations", "kinetic_motion_and_context", "evidence_sufficiency_check", "motion_anchoring_check",
+        "frame_observations", "kinetic_motion_and_context", "evidence_sufficiency_check", "motion_anchoring_check", "camera_motion_check",
         "all_required_subjects_fully_visible", "artifacts_affect_judgment",
         "event_causal_order", "defect_frame_indices", "verdict", "observed", "confidence",
     ],
@@ -288,30 +326,58 @@ def extract_frames(video_path: str, out_dir_str: str, temporal: str, claim_id: s
     frame_paths.sort(key=lambda x: x[1])
     return frame_paths
 
-def _compute_frame_motion_scores(frame_image_paths: List[str]) -> List[Optional[float]]:
-    """Computes mean-absolute-pixel-difference between consecutive frames (grayscale, downsampled)
-    as an objective, non-hallucinatable motion magnitude signal for the VLM to reason from."""
-    scores: List[Optional[float]] = [None]
+def _compute_frame_motion_signals(frame_image_paths: List[str]) -> List[Optional[dict]]:
+    """Computes motion signals between consecutive frames (grayscale, downsampled 160x90):
+    - overall: mean absolute difference across full frame
+    - border: outer 15% margin (background motion proxy)
+    - centre: central 50% box (subject motion proxy)
+    - dx, dy: global translation from phase correlation
+    """
+    signals: List[Optional[dict]] = [None]
     prev_gray = None
     for path in frame_image_paths:
         try:
             img = cv2.imread(path)
             if img is None:
                 if prev_gray is not None:
-                    scores.append(None)
+                    signals.append(None)
                 continue
             small = cv2.resize(img, (160, 90))
             gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY).astype(np.float32)
             if prev_gray is not None:
-                diff = float(np.mean(np.abs(gray - prev_gray)))
-                scores.append(diff)
+                diff = np.abs(gray - prev_gray)
+                overall = float(np.mean(diff))
+
+                # Outer 15% mask for background
+                by, bx = int(90 * 0.15), int(160 * 0.15)
+                mask = np.ones_like(diff, dtype=bool)
+                mask[by:-by, bx:-bx] = False
+                border = float(np.mean(diff[mask]))
+
+                # Central 50% for subject
+                cy0, cy1 = int(90 * 0.25), int(90 * 0.75)
+                cx0, cx1 = int(160 * 0.25), int(160 * 0.75)
+                centre = float(np.mean(diff[cy0:cy1, cx0:cx1]))
+
+                # Phase correlation for global camera shift
+                (dx, dy), response = cv2.phaseCorrelate(prev_gray, gray)
+                if response == 0.0 or np.isnan(dx) or np.isnan(dy):
+                    dx, dy = 0.0, 0.0
+
+                signals.append({
+                    "overall": overall,
+                    "border": border,
+                    "centre": centre,
+                    "dx": float(dx),
+                    "dy": float(dy),
+                })
             prev_gray = gray
         except Exception:
             if prev_gray is not None:
-                scores.append(None)
-    while len(scores) < len(frame_image_paths):
-        scores.append(None)
-    return scores[:len(frame_image_paths)]
+                signals.append(None)
+    while len(signals) < len(frame_image_paths):
+        signals.append(None)
+    return signals[:len(frame_image_paths)]
 
 def call_gemini_verify(
     claim_text: str, 
@@ -335,7 +401,9 @@ def call_gemini_verify(
             "frame_observations": "Simulation observed consistent topological continuity without scene cuts.",
             "all_required_subjects_fully_visible": True,
             "artifacts_affect_judgment": False,
-            "event_causal_order": "Verified continuous shot without cut transitions."
+            "event_causal_order": "Verified continuous shot without cut transitions.",
+            "camera_motion_check": "N/A — not a camera claim" if claim_type != "camera" else "Camera motion signals confirmed simulated camera movement.",
+            "motion_anchoring_check": "N/A"
         }
 
     from google import genai
@@ -367,15 +435,18 @@ def call_gemini_verify(
                 )
             contents.append(f"[REFERENCE_IMAGE_{idx+1}: {Path(img_path).name}]")
 
-    motion_scores = _compute_frame_motion_scores([p for p, ts in frame_paths])
+    signals = _compute_frame_motion_signals([p for p, ts in frame_paths])
 
     for i, (p, ts) in enumerate(frame_paths):
-        if i == 0 or motion_scores[i] is None:
+        s = signals[i]
+        if i == 0 or s is None:
             label = f"[FRAME_{i} @ t={ts:.2f}s]"
         else:
-            level = "LOW (check for stalled/static motion)" if motion_scores[i] < 3.0 else \
-                    "HIGH (check for cut/teleport/discontinuity)" if motion_scores[i] > 25.0 else "normal"
-            label = f"[FRAME_{i} @ t={ts:.2f}s | pixel-diff vs prev frame: {motion_scores[i]:.1f} ({level})]"
+            level = "LOW (check for stalled/static motion)" if s["overall"] < 3.0 else \
+                    "HIGH (check for cut/teleport/discontinuity)" if s["overall"] > 25.0 else "normal"
+            label = (f"[FRAME_{i} @ t={ts:.2f}s | motion: overall {s['overall']:.1f}, "
+                     f"background {s['border']:.1f}, centre {s['centre']:.1f} ({level}) | "
+                     f"global shift dx={s['dx']:+.1f} dy={s['dy']:+.1f}]")
         contents.append(label)
         with open(p, "rb") as fh:
             contents.append(
@@ -410,6 +481,8 @@ def call_gemini_verify(
             "all_required_subjects_fully_visible": False,
             "artifacts_affect_judgment": False,
             "event_causal_order": "",
+            "camera_motion_check": "",
+            "motion_anchoring_check": "",
         }
         
     VALID_VERDICTS = {"MATCH", "MISMATCH", "CANNOT_DETERMINE"}

@@ -892,6 +892,7 @@ with col2:
                         if entry.get("physics_sanity"): msg += f"> **Physics**: {entry['physics_sanity']}\n"
                         if entry.get("spatial_geometry"): msg += f"> **Geometry**: {entry['spatial_geometry']}\n"
                         if entry.get("motion_anchoring"): msg += f"> **Motion**: {entry['motion_anchoring']}\n"
+                        if entry.get("camera_motion") and "N/A" not in entry["camera_motion"]: msg += f"> **Camera**: {entry['camera_motion']}\n"
                         if entry.get("causality"): msg += f"> **Causality**: {entry['causality']}\n"
                         if entry.get("physics_laws"): msg += f"> **Physics Laws**: {entry['physics_laws']}\n"
                         status_box.write(msg)
@@ -950,6 +951,8 @@ with col2:
                     with st.expander(f"{icon} {r['claim_text']}", expanded=True):
                         if r.get("defect_time_window") and r.get("defect_time_window") != "Whole Clip":
                             st.markdown(f"**⏱️ Defect Timing:** `{r['defect_time_window']}`")
+                        if r.get("camera_motion") and "N/A" not in r.get("camera_motion"):
+                            st.markdown(f"**🎥 Camera Motion:** {r['camera_motion']}")
                         st.markdown(f"**🧐 Causal Analysis:** {r.get('event_causal_order', 'N/A')}")
                         st.markdown(f"**🎥 Frame Observations:** {r.get('frame_observations', 'N/A')}")
                 

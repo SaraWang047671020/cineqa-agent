@@ -30,7 +30,7 @@ CLAIM_SCHEMA = {
                     "type": {
                         "type": "string",
                         "enum": ["count", "direction", "relative_position",
-                                  "relative_size", "color", "state", "action", "style"],
+                                  "relative_size", "color", "state", "action", "style", "camera"],
                     },
                     "verifiable": {"type": "boolean"},
                     "temporal": {"type": "string", "enum": ["static", "sequential"]},
@@ -75,6 +75,8 @@ Your task: Distill the director's prompt (which may contain hundreds of words of
    - **`tier2_spatial_geometry`**: Strict spatial alignments and framing bounds (e.g., cut passes directly through navel center, face out of frame, left/right bokeh framing).
    - **`tier3_multimodal_consistency`**: Visual asset alignment with concept art AND overarching visual style/aesthetic (2D anime, 3D CGI).
    - **`tier4_physics_defect_control`**: Critical physical laws and negative defect suppressions (e.g., continuous non-stop flight, no bone embedded in skin, 24fps normal speed with no slow-mo).
+7. **CAMERA CLAIMS**:
+   - Any claim about shot size, camera angle, or camera movement (static / pan / tilt / dolly / zoom / tracking / handheld / crane / arc / oner) MUST use type `camera`, not `action` or `state`. The camera is not a subject in the scene — a claim about how the camera behaves is categorically different from a claim about what the subject does. Assign these to `tier2_spatial_geometry`.
 
 Scene Prompt & Technical Directives:
 {scene_text}
