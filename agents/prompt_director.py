@@ -749,14 +749,14 @@ def optimize_tweak_instruction(
     original_prompt: str,
 ) -> dict:
     """
-    把使用者隨手寫的微調指令，改寫成給 Omni 用的精準指令，並補上保留條款。
+    Rewrites a casual user tweak instruction into a precise directive for Omni, adding preservation clauses.
 
-    回傳：
+    Returns:
     {
-      "optimized": str,        # 英文，送給 Omni 的完整指令
-      "changed": bool,         # 是否有實質改寫
-      "note": str,             # 繁體中文，一句話說明做了什麼（或為何不需要改）
-      "preserved": [str]       # 明確要求保留的項目，供 UI 列出
+      "optimized": str,        # English, complete instruction to send to Omni
+      "changed": bool,         # Whether the instruction was substantially modified
+      "note": str,             # English, one concise sentence explaining what was refined or why not needed
+      "preserved": [str]       # Explicitly preserved items to list in UI
     }
     """
     cleaned_input = str(user_input or "").strip()
@@ -764,7 +764,7 @@ def optimize_tweak_instruction(
         return {
             "optimized": "",
             "changed": False,
-            "note": "未提供微調指令。",
+            "note": "No tweak instruction provided.",
             "preserved": []
         }
 
@@ -783,7 +783,7 @@ def optimize_tweak_instruction(
                 },
                 "note": {
                     "type": "string",
-                    "description": "Traditional Chinese (繁體中文). One concise sentence explaining what was refined or why no change was necessary."
+                    "description": "English. One concise sentence explaining what was refined or why no change was necessary."
                 },
                 "preserved": {
                     "type": "array",
@@ -815,8 +815,7 @@ IF THE INSTRUCTION IS ALREADY PRECISE:
 Return it unchanged, set `changed` to false, and say so in `note`.
 Knowing when not to intervene matters. Do not rewrite something that is already clear.
 
-LANGUAGE: `optimized` and `preserved` MUST be English (they are sent to the video model).
-`note` MUST be Traditional Chinese (繁體中文) — it is shown to the user.
+LANGUAGE: ALL outputs (`optimized`, `preserved`, and `note`) MUST be strictly in English.
 """
 
         prompt_payload = (
@@ -852,7 +851,7 @@ LANGUAGE: `optimized` and `preserved` MUST be English (they are sent to the vide
         return {
             "optimized": cleaned_input,
             "changed": False,
-            "note": "優化器暫時無法連線，將直接使用您輸入的原始指令。",
+            "note": "Optimizer temporarily unavailable. Using your original instruction directly.",
             "preserved": []
         }
 

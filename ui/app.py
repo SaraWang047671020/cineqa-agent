@@ -1075,7 +1075,7 @@ with col2:
 
                     col_opt_btn, _ = st.columns([1.5, 2.5])
                     with col_opt_btn:
-                        if st.button("✨ 優化並預覽 (Optimize & Preview)", key=f"opt_btn_{idx}", type="primary", use_container_width=True):
+                        if st.button("✨ Optimize & Preview", key=f"opt_btn_{idx}", type="primary", use_container_width=True):
                             if tweak_cmd.strip():
                                 with st.spinner("Cinematographer optimizing instruction with preservation clauses..."):
                                     from agents.prompt_director import optimize_tweak_instruction
@@ -1120,16 +1120,16 @@ with col2:
 
                             c_send_opt, c_send_orig, c_reopt = st.columns([1.5, 1.5, 1.2])
                             with c_send_opt:
-                                if st.button("🚀 用這個送出 (Send Optimized)", key=f"send_opt_{idx}", type="primary", use_container_width=True):
+                                if st.button("🚀 Send Optimized", key=f"send_opt_{idx}", type="primary", use_container_width=True):
                                     final_instruction_to_send = edited_val.strip()
                                     # If user modified the optimized text, mark as 'edited', otherwise 'optimized'
                                     chosen_option_label = "edited" if (edited_val.strip() != opt_res.get("optimized", "").strip()) else "optimized"
                             with c_send_orig:
-                                if st.button("↩️ 用我原本寫的送出 (Send Original)", key=f"send_orig_{idx}", use_container_width=True):
+                                if st.button("↩️ Send Original", key=f"send_orig_{idx}", use_container_width=True):
                                     final_instruction_to_send = raw_input
                                     chosen_option_label = "original"
                             with c_reopt:
-                                if st.button("🔄 重新優化 (Re-optimize)", key=f"reopt_{idx}", use_container_width=True):
+                                if st.button("🔄 Re-optimize", key=f"reopt_{idx}", use_container_width=True):
                                     st.session_state.pop(f"tweak_opt_res_{idx}", None)
                                     st.session_state.pop(f"tweak_opt_raw_{idx}", None)
                                     st.session_state.pop(f"tweak_opt_edited_{idx}", None)
@@ -1139,11 +1139,11 @@ with col2:
                             st.success(f"✅ **Director Note**: {note_text}")
                             c_send_direct, c_reopt2 = st.columns([2, 1.2])
                             with c_send_direct:
-                                if st.button("🚀 直接送出 (Send Instruction)", key=f"send_direct_{idx}", type="primary", use_container_width=True):
+                                if st.button("🚀 Send Instruction", key=f"send_direct_{idx}", type="primary", use_container_width=True):
                                     final_instruction_to_send = raw_input or opt_res.get("optimized", "")
                                     chosen_option_label = "original"
                             with c_reopt2:
-                                if st.button("🔄 重新輸入 (Reset)", key=f"reset_opt_{idx}", use_container_width=True):
+                                if st.button("🔄 Reset", key=f"reset_opt_{idx}", use_container_width=True):
                                     st.session_state.pop(f"tweak_opt_res_{idx}", None)
                                     st.session_state.pop(f"tweak_opt_raw_{idx}", None)
                                     st.session_state.pop(f"tweak_opt_edited_{idx}", None)
