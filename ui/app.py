@@ -543,27 +543,27 @@ with col1:
                     st.rerun()
         
         if st.session_state.get("director_error"):
-            st.error(f"⚠️ 連線至 Google 雲端服務時發生中斷或配置異常:\n\n`{st.session_state['director_error']}`")
+            st.error(f"⚠️ Connection interrupted or configuration issue with Google Cloud service:\n\n`{st.session_state['director_error']}`")
             col_retry, col_force_key = st.columns([1, 1])
             with col_retry:
-                if st.button("🔄 重試連線 (Retry Connection)", type="primary"):
+                if st.button("🔄 Retry Connection", type="primary"):
                     st.session_state.pop("director_error", None)
                     st.rerun()
             with col_force_key:
-                if st.button("⚡ 切換至 Gemini API Key 直連模式"):
+                if st.button("⚡ Switch to Direct Gemini API Key Mode"):
                     settings.force_disable_vertex()
                     st.session_state.pop("director_error", None)
                     st.rerun()
             
             if not settings.GEMINI_API_KEY:
-                st.warning("🔑 系統尚未檢測到 `GEMINI_API_KEY`。請在下方輸入您的 Gemini API Key：")
-                custom_key = st.text_input("輸入 Gemini API Key (以 AIzaSy 開頭):", type="password", key="inline_gemini_key_input")
+                st.warning("🔑 `GEMINI_API_KEY` not detected. Please enter your Gemini API Key below:")
+                custom_key = st.text_input("Enter Gemini API Key (starts with AIzaSy):", type="password", key="inline_gemini_key_input")
                 if custom_key:
                     os.environ["GEMINI_API_KEY"] = custom_key.strip()
                     st.session_state["gemini_api_key"] = custom_key.strip()
                     settings.force_disable_vertex()
                     st.session_state.pop("director_error", None)
-                    st.success("API Key 已成功套用！")
+                    st.success("API Key successfully applied!")
                     st.rerun()
 
         # Enforce max questions at UI level
@@ -720,8 +720,8 @@ with col1:
         with st.expander("See Breakdown"):
             st.json(st.session_state.get("director_breakdown", {}))
             
-        if st.button("🎬 Next: Generate First Frame (生成起點首幀)", type="primary", use_container_width=True):
-            with st.spinner("Generating 3 candidate First Frames (首幀候選) via Gemini Flash Image (parallel)..."):
+        if st.button("🎬 Next: Generate Opening First Frame", type="primary", use_container_width=True):
+            with st.spinner("Generating 3 candidate First Frames via Gemini Flash Image (parallel)..."):
                 import engine.storyboard
                 importlib.reload(engine.storyboard)
                 from engine.storyboard import generate_storyboard
@@ -741,8 +741,8 @@ with col1:
                 st.rerun()
 
     elif step == "keyframe":
-        st.markdown('<div class="step-header"><span class="step-badge" style="background: linear-gradient(135deg, #EC4899, #8B5CF6);">STEP 4</span><span>Select Opening First Frame (選擇起點首幀)</span></div>', unsafe_allow_html=True)
-        st.info("💡 **起點首幀 (First Frame / I2V) 定義**：此步驟生成並選定的是影片第 0 秒的「起點首幀」。影片生成模型 (Gemini Omni) 將嚴格以此畫面作為開端連續運鏡與演繹動作，確保人物外觀、光影與場景構圖在第 0 秒完全鎖定。")
+        st.markdown('<div class="step-header"><span class="step-badge" style="background: linear-gradient(135deg, #EC4899, #8B5CF6);">STEP 4</span><span>Select Opening First Frame</span></div>', unsafe_allow_html=True)
+        st.info("💡 **Opening First Frame (I2V Anchor) Definition**: This step generates and selects the opening frame at 0.0s. The video model (Gemini Omni) strictly uses this anchor to continuously animate motion and camera movements, ensuring character appearance, lighting, and composition are locked from second 0.0.")
         kfs = st.session_state.get("director_keyframes", [])
         num_cols = max(len(kfs), 1)
         cols = st.columns(num_cols)
@@ -757,12 +757,12 @@ with col1:
                     st.markdown(f'<div style="background: #111726; border: 1px dashed #EF4444; border-radius: 8px; padding: 20px; text-align: center; color: #F87171;">First Frame #{idx+1} unavailable</div>', unsafe_allow_html=True)
 
                 if is_mock:
-                    st.caption("⚠️ 網路超時備用幀 (Simulated Fallback)")
+                    st.caption("⚠️ Network Timeout Fallback Frame")
 
                 c_sel, c_reg = st.columns([1.3, 1])
                 with c_sel:
                     btn_type = "primary" if not is_mock else "secondary"
-                    if st.button(f"Select as First Frame #{idx+1} (選為起點首幀)", key=f"sel_{idx}", type=btn_type, use_container_width=True):
+                    if st.button(f"Select as Opening First Frame #{idx+1}", key=f"sel_{idx}", type=btn_type, use_container_width=True):
                         st.session_state["director_selected_kf"] = kf_path
                         st.session_state["director_step"] = "video"
                         st.rerun()
@@ -778,7 +778,7 @@ with col1:
                     
         col_b1, col_b2 = st.columns([1, 1])
         with col_b1:
-            if st.button("🔄 Regenerate All 3 First Frame Candidates (重新生成所有首幀)", use_container_width=True):
+            if st.button("🔄 Regenerate All 3 First Frame Candidates", use_container_width=True):
                 with st.spinner("Generating 3 new First Frame candidates in parallel..."):
                     import engine.storyboard
                     importlib.reload(engine.storyboard)
@@ -797,14 +797,14 @@ with col1:
                     st.session_state["director_keyframes"] = new_kfs
                     st.rerun()
         with col_b2:
-            if st.button("✏️ Back to Edit Prompt (返回修改提示詞)", use_container_width=True):
+            if st.button("✏️ Back to Edit Prompt", use_container_width=True):
                 st.session_state["director_step"] = "assembled"
                 st.rerun()
 
     elif step == "video":
         st.markdown('<div class="step-header"><span class="step-badge" style="background: linear-gradient(135deg, #10B981, #059669);">STEP 5</span><span>Ready for Omni Production Engine</span></div>', unsafe_allow_html=True)
-        st.image(st.session_state["director_selected_kf"], caption="Selected Opening First Frame (已鎖定起點首幀 - 第 0 秒)", use_container_width=True)
-        st.success("✅ 已鎖定起點首幀！影片將由 Gemini Omni 以 Image-to-Video (I2V) 模式從此幀連續展開動態生成。")
+        st.image(st.session_state["director_selected_kf"], caption="Selected Opening First Frame (Locked at 0.0s)", use_container_width=True)
+        st.success("✅ Opening First Frame locked! Gemini Omni will animate continuously from this anchor in Image-to-Video (I2V) mode.")
         
         if st.button("🎬 Generate Initial Take (Gemini Omni)", type="primary", use_container_width=True):
             with st.spinner("Generating Video..."):
@@ -1007,22 +1007,22 @@ with col2:
                             sev_icon = "🔴" if sug.get("severity") == "high" else ("🟡" if sug.get("severity") == "medium" else "🟢")
                             fix_mode = sug.get("fix_mode", "tweak")
                             if fix_mode == "reshoot":
-                                mode_badge = "🎬 **需重新生成** (結構性動作/物體消失缺陷，原片微調無法修復)"
+                                mode_badge = "🎬 **Reshoot Required** (Structural motion / topological defect, cannot be patched via V2V)"
                             else:
-                                mode_badge = "✂️ **可微調**"
+                                mode_badge = "✂️ **Fine-Tunable**"
 
                             cleaned_ts = clean_timestamp_string(str(sug.get('timestamp_range', f"0.0s - {take_dur:.1f}s (Whole Clip)")), duration=take_dur)
-                            cleaned_where = sug.get('where_in_frame') or '全畫面'
+                            cleaned_where = sug.get('where_in_frame') or 'Whole Frame'
                             cleaned_issue = clean_timestamp_string(sug.get('issue', ''), duration=take_dur)
                             why_matters = sug.get('why_it_matters', '')
 
                             with st.container(border=True):
                                 st.markdown(f"{sev_icon} **`{cleaned_ts}`** ｜ **{cleaned_where}** ｜ {mode_badge}")
-                                st.markdown(f"**現象觀察：** {cleaned_issue}")
+                                st.markdown(f"**Observation:** {cleaned_issue}")
                                 if why_matters:
-                                    st.caption(f"💡 **影響分析：** {why_matters}")
+                                    st.caption(f"💡 **Impact Analysis:** {why_matters}")
                                 if sug.get("related_claims"):
-                                    st.caption(f"關聯檢查點: {', '.join(sug.get('related_claims', []))}")
+                                    st.caption(f"Related Claims: {', '.join(sug.get('related_claims', []))}")
 
             # Conversational Fine-Tuning (Omni Interactions) - Placed directly below observations
             inter_id = take.get("interaction_id")
@@ -1033,11 +1033,11 @@ with col2:
                     has_reshoot = any(s.get("fix_mode") == "reshoot" for s in sugs)
 
                     if sugs:
-                        st.markdown("**看完上面的觀察後，用一句話告訴 Omni 你想怎麼改。一次改一件事效果最好。**")
+                        st.markdown("**After reviewing the observations above, tell Omni what to change in one sentence. Changing one thing at a time yields the best results.**")
 
                     mode_options = [
-                        "🎬 Reshoot with Correction (從首幀重新生成 — 推薦：動作、運鏡、物理、實體修正)",
-                        "✂️ Surgical In-Place Edit (原片直接微調 — 僅適用：全片色調、微調光影、雨霧氛圍)"
+                        "🎬 Reshoot with Correction (Regenerate from First Frame — Recommended for action, camera motion, physics, entity fixes)",
+                        "✂️ Surgical In-Place Edit (Direct V2V edit — Suitable for tone, lighting, weather, atmosphere)"
                     ]
 
                     # Auto-suggest / default mode based on observation
@@ -1046,11 +1046,11 @@ with col2:
                     elif st.session_state[f"tweak_mode_{idx}"] not in mode_options:
                         old_v = str(st.session_state.pop(f"tweak_mode_{idx}", ""))
                         st.session_state[f"tweak_mode_{idx}"] = (
-                            mode_options[1] if ("Surgical" in old_v or "In-Place" in old_v or "微調" in old_v) else mode_options[0]
+                            mode_options[1] if ("Surgical" in old_v or "In-Place" in old_v or "Direct" in old_v) else mode_options[0]
                         )
 
                     if has_reshoot:
-                        st.warning("🎬 **系統觀察提示**：檢測到結構性缺陷（動作/運鏡/物體變化），原片微調無法修復，**需重新生成**。建議選擇「🎬 Reshoot with Correction」！")
+                        st.warning("🎬 **System Observation Notice**: Structural defects detected (motion / camera / topology break). In-place edit cannot fix this; **a reshoot is required**. '🎬 Reshoot with Correction' is recommended!")
 
                     tweak_mode = st.radio(
                         "Fine-Tuning Execution Mode",
@@ -1061,15 +1061,15 @@ with col2:
                     )
 
                     if tweak_mode.startswith("✂️"):
-                        st.caption("ℹ️ **原片微調 (V2V) 提示**：此模式直接以 Take 的 MP4 像素進行局部後製疊加，適合微調光線、雨霧或色調。**AI 影片模型無法在原片像素上重新生成不存在的骨架動作、走位或運鏡**。如需修正角色動作或運鏡，強烈建議選擇「🎬 **Reshoot with Correction**」！")
+                        st.caption("ℹ️ **In-Place Edit (V2V) Tip**: This mode modifies pixels directly on the source footage, ideal for color grading, lighting, or atmosphere. **Video models cannot hallucinate new skeletal motion, character blocking, or camera moves onto existing pixels**. To fix motion or camera action, choose '🎬 **Reshoot with Correction**'!")
 
                     col_t1, col_t2 = st.columns([3, 1], vertical_alignment="bottom")
                     with col_t1:
                         tweak_cmd = st.text_area(
-                            "用一句話告訴 Omni 你想怎麼改 (Fine-Tuning Instruction)",
+                            "Tell Omni what to change in one sentence (Fine-Tuning Instruction)",
                             key=f"tweak_input_{idx}",
                             height=75,
-                            placeholder="看完上面的觀察後，用一句話告訴 Omni 你想怎麼改。例如：讓人物步伐加快，或降低畫面主光源兩檔（一次改一件事效果最好）"
+                            placeholder="e.g., Accelerate character walking pace; or Lower key light by two stops (One change at a time works best)"
                         )
                     with col_t2:
                         tweak_btn = st.button("✨ Apply Tweak", key=f"tweak_btn_{idx}", type="primary", use_container_width=True)
