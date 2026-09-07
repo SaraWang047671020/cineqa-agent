@@ -36,7 +36,11 @@ for k in [
 from config.settings import settings
 from engine.claims import extract_claims
 from telemetry.metrics import TAKES_TOTAL, INSPECTION_DURATION_SECONDS, HUMAN_REVIEWS_TRIGGERED
-from engine.pipeline import run_pipeline, stream_pipeline
+import engine.pipeline
+importlib.reload(engine.pipeline)
+import engine.verify
+importlib.reload(engine.verify)
+from engine.pipeline import run_pipeline, stream_pipeline, AUTONOMOUS_CLAIM_TYPES
 from engine.generator import generate_video
 from agents.remediator import PromptRemediatorAgent
 import agents.prompt_director
@@ -943,11 +947,12 @@ with col2:
                     st.rerun()
             else:
                 # 2. RENDER VERIFICATION RESULTS (TIERED TRUST: AUTONOMOUS vs DIRECTOR REVIEW)
-                verified_items = [r for r in take["ledger"] if r.get("review_tier") == "verified"]
-                review_items = [r for r in take["ledger"] if r.get("review_tier") != "verified"]
-
-                if not verified_items and not review_items:
-                    verified_items = take["ledger"]
+                verified_items = [
+                    r for r in take["ledger"]
+                    if r.get("review_tier") == "verified" or 
+                       (not r.get("review_tier") and r.get("type") in AUTONOMOUS_CLAIM_TYPES and r.get("conformal_autonomous", True))
+                ]
+                review_items = [r for r in take["ledger"] if r not in verified_items]
 
                 verified_matches = sum(1 for r in verified_items if r.get("verdict") == "MATCH")
                 verified_pass_rate = (verified_matches / len(verified_items) * 100) if verified_items else 0

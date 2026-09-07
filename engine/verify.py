@@ -535,7 +535,9 @@ def call_gemini_verify_with_consensus(
         result["consensus_calls"] = 1
         result["consensus_votes"] = ["MATCH"]
         result["prediction_set"] = ["MATCH"]
+        result["conformal_set_size"] = 1
         result["conformal_autonomous"] = True
+        result["coverage_guarantee"] = 0.80
         return result
 
     # Item 1: Parallelize the 3 consensus votes!

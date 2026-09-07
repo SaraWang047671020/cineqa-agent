@@ -112,8 +112,8 @@ def stream_pipeline(
         # Determine Trust Tier: Autonomous Verified vs Flagged for Director Review
         claim_type = claim.get("type", "action")
         is_autonomous_type = claim_type in AUTONOMOUS_CLAIM_TYPES
-        conformal_autonomous = verdict_data.get("conformal_autonomous", True)
-        conformal_set_size = verdict_data.get("conformal_set_size", 1)
+        conformal_autonomous = verdict_data.get("conformal_autonomous") if verdict_data.get("conformal_autonomous") is not None else True
+        conformal_set_size = verdict_data.get("conformal_set_size") or 1
 
         # Dual-gate verification: Type precision >= 80% AND decisive Conformal Prediction Set (size == 1)
         if is_autonomous_type and conformal_autonomous and conformal_set_size == 1:
