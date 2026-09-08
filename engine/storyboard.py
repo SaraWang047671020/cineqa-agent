@@ -49,8 +49,8 @@ def generate_storyboard(
                 frame_type_label = "FIRST FRAME (t=0.0s)" if (is_ff and not base_image_path) else "KEYFRAME"
                 print(f"[CineQA Storyboard] Launching live {frame_type_label} generation via {model_name}...")
                 
-                # Gemini 3 Pro Image is hosted in the 'global' region, while 2.5 Flash is in us-central1
-                loc_override = "global"
+                # gemini-2.5-flash-image quota on Vertex AI is located in us-central1
+                loc_override = "us-central1"
                 client = settings.get_genai_client(location_override=loc_override)
                 
                 full_prompt = clean_prompt

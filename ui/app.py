@@ -745,7 +745,11 @@ with col1:
                 from engine.storyboard import generate_storyboard
                 from concurrent.futures import ThreadPoolExecutor
                 with ThreadPoolExecutor(max_workers=3) as executor:
-                    futures = [executor.submit(generate_storyboard, prompt=final_prompt, is_first_frame=True, use_live_imagen=live_veo) for _ in range(3)]
+                    def _staggered_gen(idx):
+                        if idx > 0:
+                            time.sleep(0.25 * idx)
+                        return generate_storyboard(prompt=final_prompt, is_first_frame=True, use_live_imagen=live_veo)
+                    futures = [executor.submit(_staggered_gen, i) for i in range(3)]
                     kfs = []
                     for f in futures:
                         try:
@@ -803,7 +807,11 @@ with col1:
                     from engine.storyboard import generate_storyboard
                     from concurrent.futures import ThreadPoolExecutor
                     with ThreadPoolExecutor(max_workers=3) as executor:
-                        futures = [executor.submit(generate_storyboard, prompt=st.session_state["director_final"], is_first_frame=True, use_live_imagen=live_veo) for _ in range(3)]
+                        def _staggered_regen(idx):
+                            if idx > 0:
+                                time.sleep(0.25 * idx)
+                            return generate_storyboard(prompt=st.session_state["director_final"], is_first_frame=True, use_live_imagen=live_veo)
+                        futures = [executor.submit(_staggered_regen, i) for i in range(3)]
                         new_kfs = []
                         for f in futures:
                             try:
