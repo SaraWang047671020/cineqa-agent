@@ -1138,9 +1138,10 @@ with col2:
                         st.caption("ℹ️ **In-Place Edit (V2V) Tip**: This mode modifies pixels directly on the source footage, ideal for color grading, lighting, or atmosphere. **Video models cannot hallucinate new skeletal motion, character blocking, or camera moves onto existing pixels**. To fix motion or camera action, choose '🎬 **Reshoot with Correction**'!")
 
                     # 1. User types casual instruction in text_area
+                    tweak_ver = st.session_state.get(f"tweak_ver_{idx}", 0)
                     tweak_cmd = st.text_area(
                         "Tell Omni what to change in one sentence (Fine-Tuning Instruction)",
-                        key=f"tweak_input_{idx}",
+                        key=f"tweak_input_{idx}_{tweak_ver}",
                         height=75,
                         placeholder="e.g., Accelerate character walking pace; or Lower key light by two stops (One change at a time works best)"
                     )
@@ -1281,8 +1282,8 @@ with col2:
                                     "duration": vid_duration
                                 })
                                 
-                                # Clear state for this take
-                                st.session_state[f"tweak_input_{idx}"] = ""
+                                # Clear state for this take by bumping version counter
+                                st.session_state[f"tweak_ver_{idx}"] = st.session_state.get(f"tweak_ver_{idx}", 0) + 1
                                 st.session_state.pop(f"tweak_opt_res_{idx}", None)
                                 st.session_state.pop(f"tweak_opt_raw_{idx}", None)
                                 st.session_state.pop(f"tweak_opt_edited_{idx}", None)
