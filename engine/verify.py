@@ -240,18 +240,44 @@ VERIFY_RESPONSE_SCHEMA = {
 # Instantiate singleton Conformal Judge calibrated on 92 benchmark rows
 _conformal_judge = ConformalJudge(confidence_level=0.80)
 
+def _get_ffmpeg_bin() -> str:
+    import shutil
+    cmd = shutil.which("ffmpeg")
+    if cmd:
+        return cmd
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return "ffmpeg"
+
 def get_clip_duration(video_path: str) -> float:
-    result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=noprint_wrappers=1:nokey=1", str(video_path)],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0 or not result.stdout.strip():
-        return 4.0
-    return float(result.stdout.strip())
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(video_path)],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return float(result.stdout.strip())
+    except Exception:
+        pass
+
+    try:
+        import cv2
+        cap = cv2.VideoCapture(str(video_path))
+        fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
+        frames = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0
+        cap.release()
+        if frames > 0 and fps > 0:
+            return float(frames / fps)
+    except Exception:
+        pass
+
+    return 4.0
 
 def extract_frames(video_path: str, out_dir_str: str, temporal: str, claim_id: str, sampling_strategy: str = "uniform", claim_type: str = "action") -> List[Tuple[str, float]]:
-    """Extracts frames from video in a SINGLE fast ffmpeg pass."""
+    """Extracts frames from video in a SINGLE fast ffmpeg pass with OpenCV fallback."""
     video = Path(video_path)
     
     if video.suffix.lower() in [".jpg", ".jpeg", ".png", ".webp"]:
@@ -268,16 +294,7 @@ def extract_frames(video_path: str, out_dir_str: str, temporal: str, claim_id: s
     if out_dir.exists(): shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     
-    duration = 4.0
-    try:
-        res = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(video_path)],
-            capture_output=True, text=True
-        )
-        if res.stdout.strip():
-            duration = float(res.stdout.strip())
-    except Exception:
-        pass
+    duration = get_clip_duration(str(video_path))
 
     if temporal == "static":
         n = 3
@@ -300,20 +317,39 @@ def extract_frames(video_path: str, out_dir_str: str, temporal: str, claim_id: s
 
     # Single FFmpeg pass (Item 3 & 6)
     frame_paths = []
-    # Build a complex filter graph to select exact frames
-
-    
+    ffmpeg_bin = _get_ffmpeg_bin()
     import concurrent.futures
     
     def extract_one(i, ts):
         out_path = out_dir / f"{claim_id}_f{i}.jpg"
-        subprocess.run(
-            ["ffmpeg", "-y", "-i", str(video_path), "-ss", f"{ts:.3f}",
-             "-frames:v", "1", "-q:v", "5", "-vf", "scale='min(800,iw)':-2", str(out_path)],
-            capture_output=True,
-        )
-        if out_path.exists():
-            return (str(out_path), ts)
+        try:
+            subprocess.run(
+                [ffmpeg_bin, "-y", "-i", str(video_path), "-ss", f"{ts:.3f}",
+                 "-frames:v", "1", "-q:v", "5", "-vf", "scale='min(800,iw)':-2", str(out_path)],
+                capture_output=True,
+            )
+            if out_path.exists() and out_path.stat().st_size > 500:
+                return (str(out_path), ts)
+        except Exception:
+            pass
+
+        # Robust OpenCV fallback if ffmpeg binary fails
+        try:
+            import cv2
+            cap = cv2.VideoCapture(str(video_path))
+            cap.set(cv2.CAP_PROP_POS_MSEC, ts * 1000.0)
+            ret, frame = cap.read()
+            cap.release()
+            if ret and frame is not None:
+                h, w = frame.shape[:2]
+                if w > 800:
+                    new_h = int(h * (800 / w))
+                    frame = cv2.resize(frame, (800, new_h))
+                cv2.imwrite(str(out_path), frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                return (str(out_path), ts)
+        except Exception:
+            pass
+
         return None
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:

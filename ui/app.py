@@ -14,7 +14,12 @@ if root_dir not in sys.path:
 import streamlit as st
 
 # Materialize GCP Service Account JSON credentials from Streamlit Secrets if present
-if "gcp_service_account" in st.secrets and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+try:
+    _has_gcp_secret = "gcp_service_account" in st.secrets
+except Exception:
+    _has_gcp_secret = False
+
+if _has_gcp_secret and not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
     try:
         key_dict = dict(st.secrets["gcp_service_account"])
         key_path = os.path.join(tempfile.gettempdir(), "gcp_key.json")
@@ -25,13 +30,20 @@ if "gcp_service_account" in st.secrets and not os.environ.get("GOOGLE_APPLICATIO
         print(f"[CineQA] Failed to write gcp_service_account from st.secrets: {_e}")
 
 # Inject ClickHouse, Vertex AI, and other configuration into os.environ for child processes / libraries
-for k in [
-    "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION", "DEFAULT_GEMINI_MODEL",
-    "CLICKHOUSE_HOST", "CLICKHOUSE_PORT", "CLICKHOUSE_USER", "CLICKHOUSE_PASSWORD",
-    "USE_VERTEX_AI", "GEMINI_API_KEY"
-]:
-    if k in st.secrets and not os.environ.get(k):
-        os.environ[k] = str(st.secrets[k])
+try:
+    _secrets_available = True
+    _ = list(st.secrets.keys())
+except Exception:
+    _secrets_available = False
+
+if _secrets_available:
+    for k in [
+        "GOOGLE_CLOUD_PROJECT", "GOOGLE_CLOUD_LOCATION", "DEFAULT_GEMINI_MODEL",
+        "CLICKHOUSE_HOST", "CLICKHOUSE_PORT", "CLICKHOUSE_USER", "CLICKHOUSE_PASSWORD",
+        "USE_VERTEX_AI", "GEMINI_API_KEY"
+    ]:
+        if k in st.secrets and not os.environ.get(k):
+            os.environ[k] = str(st.secrets[k])
 
 from config.settings import settings
 from engine.claims import extract_claims
