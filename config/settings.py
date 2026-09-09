@@ -59,8 +59,7 @@ class Settings:
     _lock = None
     _force_disable_vertex: bool = False
 
-    # Observability & Split-Conformal (LAC) Settings
-    PROMETHEUS_PORT: int = int(os.getenv("PROMETHEUS_PORT", "8000"))
+    # Split-Conformal (LAC) Settings
     CONFIDENCE_LEVEL_ALPHA: float = float(os.getenv("CONFIDENCE_LEVEL_ALPHA", "0.10"))  # 90% confidence
     HIGH_UNCERTAINTY_THRESHOLD: float = float(os.getenv("HIGH_UNCERTAINTY_THRESHOLD", "20.0"))
     DEFAULT_GEMINI_MODEL: str = os.getenv("DEFAULT_GEMINI_MODEL", "gemini-3.6-flash")

@@ -80,12 +80,14 @@ In the root of the repository (`cineqa_agent/`), create or update your `.env` fi
 ```ini
 # Google Cloud Vertex AI Configuration
 GOOGLE_CLOUD_PROJECT=project-aefe3ba2-ab8b-478a-82d
-GOOGLE_CLOUD_LOCATION=us-central1
+GOOGLE_CLOUD_LOCATION=us-east5
 DEFAULT_GEMINI_MODEL=gemini-2.5-flash
 
-# Telemetry & Monitoring Ports
-PROMETHEUS_PORT=8000
-METRICS_EXPORT_INTERVAL=5.0
+# ClickHouse Cloud (Partner Service for Telemetry & MCP Memory)
+CLICKHOUSE_HOST=your-clickhouse-host
+CLICKHOUSE_PORT=8443
+CLICKHOUSE_USER=default
+CLICKHOUSE_PASSWORD=your-clickhouse-password
 ```
 
 ---
