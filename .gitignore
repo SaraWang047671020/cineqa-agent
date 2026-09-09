@@ -1,80 +1,56 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *.class
-*.env
-.env.local
+*.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+downloads/
+*.egg-info/
+*.egg
+
+# Virtual environments
 .venv/
 venv/
 env/
+ENV/
 
-# GCP Credentials & Secrets
+# Environment variables, credentials & secrets
+.env
+.env.*
+*.env
 *.json
 gcp-key.json
 service_account*.json
 
-# Video & Temp Files
-temp_*
+# Video, media & runtime artifacts
+temp_*/
+frames/
 *.mp4
 *.avi
 *.mov
+*.wav
+*.mp3
 
-# IDE & OS
+# Editor & OS files
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
-frames/
+*.swp
+*.swo
 
-# Scratch & patch scripts
-patch_*.py
-fix_*.py
-fix.py
-test_*.py
-print_*.py
-update_*.py
-recover*.py
-inject_*.py
-insert_*.py
-scan_*.py
-truncate_*.py
-force_*.py
-help_*.py
-check_*.py
-add_*.py
-debug_*.py
-display_*.py
-final_*.py
-apply_*.py
-find_*.py
-revert_*.py
-rewrite_*.py
-remove_*.py
-rename_*.py
-replace_*.py
-restore_*.py
-unblock_*.py
-unseal_*.py
-parse_*.py
-pass_*.py
-safe_*.py
-soften_*.py
-manual_*.py
-list_*.py
-cleanup_*.py
-fetch_*.py
-format_prompt.py
-extract.py
-refine_ui.py
-how_we_built_it.md
-demo_script.md
-GOOGLE_CLOUD_SETUP_GUIDE*.md
-PROJECT_ANALYSIS_AND_SCHEDULE.md
-dummy.png
-test_ref.jpg
-ui/app_v2_extracted.py
+# Local development, logs & scratchpad
+notes/
+scratch/
+*.log
+*.tmp
 *.bak
 *.recovered*
-*.txt
-!packages.txt
+*.draft.md
 *.db
