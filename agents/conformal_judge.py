@@ -1,5 +1,18 @@
-﻿"""Split-Conformal Decision Layer (LAC): Statistically Sound Video Quality Verification.
+"""Split-Conformal Decision Layer (LAC): Statistically Sound Video Quality Verification.
 Replaces arbitrary heuristic thresholds with mathematically guaranteed prediction sets.
+
+Method
+------
+Implements the Least Ambiguous set-valued Classifier (LAC) non-conformity score under
+the standard split-conformal framework:
+
+    Sadinle, M., Lei, J., & Wasserman, L. (2019).
+    Least ambiguous set-valued classifiers with bounded error levels.
+    Journal of the American Statistical Association, 114(525), 223-234.
+    https://doi.org/10.48550/arXiv.1609.00451
+
+The algorithm is from that paper; this implementation is written directly against it in
+NumPy, with no third-party conformal prediction library.
 """
 
 import os
@@ -37,6 +50,10 @@ class SplitConformalLAC:
         if n_scores == 0:
             return
             
+        # Finite-sample corrected quantile level: (n+1)(1-alpha) / n.
+        # The ceiling in the textbook form  ceil((n+1)(1-alpha)) / n  is realised here by
+        # np.quantile(..., method='higher'), which selects the next order statistic at or
+        # above q_level rather than interpolating. Equivalent, and conservative by design.
         q_level = min(1.0, self.confidence_level * (n_scores + 1.0) / n_scores)
         self.q_hat = np.quantile(scores, q_level, method='higher')
         
