@@ -66,7 +66,7 @@ fetch_*.py
 format_prompt.py
 extract.py
 refine_ui.py
-mcp_server.py
+how_we_built_it.md
 dummy.png
 test_ref.jpg
 ui/app_v2_extracted.py

@@ -1,5 +1,5 @@
-"""Google VEO Video Generation Adapter: Live Google Cloud Vertex AI Video Generation & Closed Loop.
-Generates video takes via Google Cloud Vertex AI (Veo 3.1 Fast), exports to GCS, and downloads to local disk.
+"""Google Omni Video Generation Adapter: Live Google Cloud Vertex AI Video Generation & Closed Loop.
+Generates video takes via Google Cloud Vertex AI (Gemini Omni), exports to GCS, and downloads to local disk.
 """
 
 import os
@@ -24,8 +24,8 @@ from google import genai
 from google.genai.types import GenerateVideosConfig
 from google.cloud import storage
 
-DEFAULT_VEO_MODEL = "veo-3.1-fast-generate-001"
-DEFAULT_GCS_BUCKET = "project-aefe3ba2-ab8b-478a-82d-veo"
+DEFAULT_OMNI_MODEL = "gemini-omni-flash-preview"
+DEFAULT_GCS_BUCKET = "project-aefe3ba2-ab8b-478a-82d-omni"
 
 _cached_auth_creds = None
 _auth_lock = None
@@ -133,36 +133,39 @@ def generate_video(
     duration_seconds: int = 4,
     fps: int = 24,
     use_live_veo: bool = True,
+    use_live_api: Optional[bool] = None,
     out_dir: str = "temp_eval/generated_takes",
-    video_engine: str = "veo-3.1-fast-generate-001",
+    video_engine: str = "gemini-omni-flash-preview",
     resolution: str = "720p",
     previous_interaction_id: Optional[str] = None,
     interaction_id: Optional[str] = None,
     **kwargs
 ) -> Dict[str, Any]:
     """
-    Generates video takes using live Google Vertex AI Veo 3.1, exports to GCS bucket,
+    Generates video takes using live Google Vertex AI Gemini Omni, exports to GCS bucket,
     and automatically downloads the .mp4 file to local disk for instant verification & playback.
     """
+    if use_live_api is not None:
+        use_live_veo = use_live_api
     # [Camera Movement Fix] Image-to-Image (I2I) interpolation fundamentally restricts camera movement 
     # because the 2D end-frame fixes the vanishing points. If the user explicitly asks for camera movement,
-    # we MUST drop the last_frame_path to let Veo generate native 3D camera sweeps.
+    # we MUST drop the last_frame_path to let generator produce native 3D camera sweeps.
     camera_keywords = ["pan", "tilt", "zoom", "track", "dolly", "crane", "push in", "pull out"]
     if last_frame_path and any(re.search(r'\b' + kw + r'\b', prompt.lower()) for kw in camera_keywords):
-        print(f"[CineQA Veo] Camera movement detected in prompt! Dropping last_frame_path to unlock Veo's native 3D camera routing.")
+        print(f"[CineQA Omni] Camera movement detected in prompt! Dropping last_frame_path to unlock native 3D camera routing.")
         last_frame_path = None
 
     out_path_dir = Path(os.path.abspath(out_dir))
     out_path_dir.mkdir(parents=True, exist_ok=True)
     
     timestamp = int(time.time())
-    local_out_path = str(out_path_dir / f"veo_take_remediated_{timestamp}.mp4")
+    local_out_path = str(out_path_dir / f"omni_take_remediated_{timestamp}.mp4")
     output_gcs_uri = f"gs://{DEFAULT_GCS_BUCKET}/healed_takes"
 
-    with tracer.start_as_current_span("VeoGenerator.generate_video"):
+    with tracer.start_as_current_span("OmniGenerator.generate_video"):
         if use_live_veo:
             try:
-                print(f"[CineQA Veo] Launching live generation via Vertex AI ({DEFAULT_VEO_MODEL})...")
+                print(f"[CineQA Omni] Launching live generation via Vertex AI ({video_engine})...")
                 loc_override = 'us-east5' if 'omni' in video_engine else 'us-central1'
                 client = settings.get_genai_client(location_override=loc_override)
 
@@ -221,20 +224,20 @@ def generate_video(
                     )
                 
                 if first_frame_path and os.path.exists(first_frame_path):
-                    print("[CineQA Veo] I2V mode active. Clearing ASSET/STYLE references to avoid API conflict (Image and reference images cannot be both set).")
+                    print("[CineQA Omni] I2V mode active. Clearing ASSET/STYLE references to avoid API conflict (Image and reference images cannot be both set).")
                     ref_images_payload = []
                     config_kwargs.pop("reference_images", None)
 
                 if ref_images_payload:
                     config_kwargs["reference_images"] = ref_images_payload
-                    print(f"[CineQA Veo] Using {len(ref_images_payload)} reference image(s) (ASSET/STYLE)")
+                    print(f"[CineQA Omni] Using {len(ref_images_payload)} reference image(s) (ASSET/STYLE)")
 
                 # Handle Last Frame (for Frame Interpolation)
                 if last_frame_path and os.path.exists(last_frame_path):
                     img_bytes = _get_resized_image_bytes(last_frame_path)
                     mime_type = "image/jpeg"
                     config_kwargs["last_frame"] = Image(image_bytes=img_bytes, mime_type=mime_type)
-                    print(f"[CineQA Veo] Using last_frame interpolation: {last_frame_path}")
+                    print(f"[CineQA Omni] Using last_frame interpolation: {last_frame_path}")
 
                 # Handle Inpaint Mask
                 if mask_path and os.path.exists(mask_path):
@@ -246,7 +249,7 @@ def generate_video(
                         image=Image(image_bytes=img_bytes, mime_type=mime_type),
                         mask_mode="INSERT"
                     )
-                    print(f"[CineQA Veo] Using inpaint mask (INSERT mode): {mask_path}")
+                    print(f"[CineQA Omni] Using inpaint mask (INSERT mode): {mask_path}")
 
                 config = GenerateVideosConfig(**config_kwargs)
                 
@@ -257,7 +260,7 @@ def generate_video(
                     with open(source_video_path, "rb") as f:
                         vid_bytes = f.read()
                     source_kwargs["video"] = Video(video_bytes=vid_bytes, mime_type="video/mp4")
-                    print(f"[CineQA Veo] Using VIDEO EXTENSION from {source_video_path}")
+                    print(f"[CineQA Omni] Using VIDEO EXTENSION from {source_video_path}")
                     if "image" in source_kwargs:
                         del source_kwargs["image"]
                 if last_frame_path:
@@ -267,11 +270,11 @@ def generate_video(
                     img_bytes = _get_resized_image_bytes(first_frame_path)
                     mime_type = "image/jpeg"
                     source_kwargs["image"] = Image(image_bytes=img_bytes, mime_type=mime_type)
-                    print(f"[CineQA Veo] Using FIRST FRAME (I2V) from {first_frame_path}")
+                    print(f"[CineQA Omni] Using FIRST FRAME (I2V) from {first_frame_path}")
                 
                 source = GenerateVideosSource(**source_kwargs)
                 if "omni" in video_engine:
-                    print(f"[CineQA Veo] Bypassing SDK, using direct REST interactions API for Omni...")
+                    print(f"[CineQA Omni] Bypassing SDK, using direct REST interactions API for Omni...")
                     import requests
                     import base64
                     
@@ -417,7 +420,7 @@ def generate_video(
                         f.write(base64.b64decode(video_b64))
                         
                     interaction_id = resp_data.get("id")
-                    print(f"[CineQA Veo] Omni video saved to {local_out_path} (Interaction ID: {interaction_id})")
+                    print(f"[CineQA Omni] Omni video saved to {local_out_path} (Interaction ID: {interaction_id})")
                     return {
                         "video_path": local_out_path,
                         "model_used": video_engine,
@@ -442,7 +445,7 @@ def generate_video(
 
                     )
 
-                print(f"[CineQA Veo] Operation started: {operation.name}. Polling Vertex AI...")
+                print(f"[CineQA Omni] Operation started: {operation.name}. Polling Vertex AI...")
                 
                 # Poll Vertex AI until generation completes
                 poll_count = 0
@@ -458,7 +461,7 @@ def generate_video(
                 videos = operation.response.generated_videos
                 if videos:
                     gcs_uri = videos[0].video.uri
-                    print(f"[CineQA Veo] Succeeded: {gcs_uri}. Downloading to {local_out_path}...")
+                    print(f"[CineQA Omni] Succeeded: {gcs_uri}. Downloading to {local_out_path}...")
                     
                     # Download from GCS bucket to local disk
                     if gcs_uri.startswith("gs://"):
@@ -472,21 +475,21 @@ def generate_video(
                         blob.download_to_filename(local_out_path)
                         
                         if os.path.exists(local_out_path) and os.path.getsize(local_out_path) > 1000:
-                            print(f"[CineQA Veo] Download complete: {local_out_path} ({os.path.getsize(local_out_path)} bytes)")
+                            print(f"[CineQA Omni] Download complete: {local_out_path} ({os.path.getsize(local_out_path)} bytes)")
                             return {
                                 "status": "SUCCESS",
                                 "video_path": os.path.abspath(local_out_path),
                                 "model_used": f"{video_engine} (Google Cloud Vertex AI)",
                                 "aspect_ratio": aspect_ratio,
                                 "duration_seconds": duration_seconds,
-                                "mode": "live_vertex_ai_veo",
+                                "mode": "live_vertex_ai_omni",
                                 "prompt_applied": prompt,
                                 "negative_prompt_applied": negative_prompt,
                                 "seed_used": active_seed,
                                 "gcs_uri": gcs_uri
                             }
             except Exception as e:
-                print(f"[CineQA Veo] Live Veo exception: {e}")
+                print(f"[CineQA Omni] Live generation exception: {e}")
                 raise e
 
 def create_bulletproof_sample_clip(out_path: str, duration: int = 5, fps: int = 24) -> str:
@@ -506,7 +509,7 @@ def create_bulletproof_sample_clip(out_path: str, duration: int = 5, fps: int = 
                 frame[:, :, 0] = np.linspace(25, 45, width, dtype=np.uint8)
                 frame[:, :, 1] = np.linspace(15, 30, width, dtype=np.uint8)
                 frame[:, :, 2] = np.linspace(10, 20, width, dtype=np.uint8)
-                cv2.putText(frame, "Google VEO - Remediated Take", (width // 2 - 300, height // 2), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 230, 0), 2, cv2.LINE_AA)
+                cv2.putText(frame, "Google Omni - Remediated Take", (width // 2 - 300, height // 2), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 230, 0), 2, cv2.LINE_AA)
                 out.write(frame)
             out.release()
     except Exception:

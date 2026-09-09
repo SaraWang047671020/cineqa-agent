@@ -54,7 +54,6 @@ import engine.verify
 importlib.reload(engine.verify)
 from engine.pipeline import run_pipeline, stream_pipeline, AUTONOMOUS_CLAIM_TYPES
 from engine.generator import generate_video
-from agents.remediator import PromptRemediatorAgent
 import agents.prompt_director
 importlib.reload(agents.prompt_director)
 
@@ -473,7 +472,7 @@ st.markdown("""
         <div class="studio-subtitle">Autonomous Healing Workflow · Multimodal 4-Tier Verification · Hollywood Lineage Engine</div>
     </div>
     <div>
-        <span class="studio-badge">⚡ OMNI &amp; VEO PRO</span>
+        <span class="studio-badge">⚡ GEMINI OMNI PRO</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -505,21 +504,20 @@ with st.container(border=True):
     with col_t_eng:
         vid_engine = st.selectbox(
             "Video Engine",
-            ["gemini-omni-flash-preview (Gemini Omni)", "veo-3.1-fast-generate-001 (Google Veo)"],
+            ["gemini-omni-flash-preview (Gemini Omni)"],
             index=0,
             label_visibility="collapsed"
         )
     with col_t_dur:
-        durations = list(range(3, 11)) if "omni" in vid_engine.lower() else [4, 8]
-        default_dur_idx = 2 if "omni" in vid_engine.lower() else 0
+        durations = list(range(3, 11))
         vid_duration = st.selectbox(
             "Duration (sec)",
             durations,
-            index=default_dur_idx,
+            index=2,
             label_visibility="collapsed"
         )
     with col_t_chk1:
-        live_veo = st.checkbox("🔥 Live API", value=True)
+        live_api = st.checkbox("🔥 Live API", value=True)
     with col_t_chk2:
         dry_run = st.checkbox("🧪 Mock Run", value=False)
     with col_t_rst:
@@ -541,12 +539,54 @@ with col1:
     if step == "input":
         st.markdown('<div class="step-header"><span class="step-badge">STEP 1</span><span>Input Core Concept</span></div>', unsafe_allow_html=True)
         raw_idea = st.text_area("What scene do you envision?", value=st.session_state.get("director_prompt", ""), placeholder="e.g., A gritty cybernetic detective enters a rain-slicked neon alleyway in Neo-Tokyo...")
-        if st.button("🚀 Begin Guided Cinematic Interview", type="primary", use_container_width=True) and raw_idea:
-            st.session_state["director_prompt"] = raw_idea
-            st.session_state["director_answered"] = []
-            st.session_state["director_current_q"] = None
-            st.session_state["director_step"] = "options"
-            st.rerun()
+        c_btn1, c_btn2 = st.columns([1.1, 1])
+        with c_btn1:
+            if st.button("🚀 Begin Guided Cinematic Interview", type="primary", use_container_width=True) and raw_idea:
+                st.session_state["director_prompt"] = raw_idea
+                st.session_state["director_answered"] = []
+                st.session_state["director_current_q"] = None
+                st.session_state["director_step"] = "options"
+                st.rerun()
+        with c_btn2:
+            if st.button("⚡ Direct Generate Video (Demo Shortcut)", use_container_width=True, help="Bypasses questions and keyframes; generates video directly from your prompt for demo purposes.") and raw_idea:
+                st.session_state["director_prompt"] = raw_idea
+                st.session_state["director_final"] = raw_idea
+                st.session_state["original_prompt"] = raw_idea
+                with st.spinner("⚡ Direct generating video via Gemini Omni..."):
+                    from engine.generator import generate_video
+                    try:
+                        gen_res = generate_video(
+                            prompt=raw_idea,
+                            negative_prompt="",
+                            duration_seconds=vid_duration,
+                            video_engine="gemini-omni-flash-preview",
+                            use_live_api=live_api
+                        )
+                        new_take = len(st.session_state.get("take_history", [])) + 1
+                        st.session_state["take_history"].append({
+                            "take_num": new_take,
+                            "prompt": raw_idea,
+                            "video_path": gen_res.get("video_path"),
+                            "ledger": None,
+                            "seed": gen_res.get("seed_used"),
+                            "interaction_id": gen_res.get("interaction_id"),
+                            "duration": vid_duration
+                        })
+                        from engine.claims import extract_claims
+                        claims = extract_claims(raw_idea)
+                        physics_claim = {
+                            "claim_text": "Universal Physics & Topology Sanity: The video MUST maintain strict topological continuity across all frames.",
+                            "type": "physics_sanity",
+                            "verifiable": True,
+                            "temporal": "sequential",
+                            "tier": "Tier 0 (Foundation)",
+                            "reference_source": "system_rule"
+                        }
+                        claims.insert(0, physics_claim)
+                        st.session_state["extracted_claims"] = claims
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Direct generation failed: {e}")
 
     elif step == "options":
         st.markdown('<div class="step-header"><span class="step-badge">STEP 2</span><span>Cinematic Dimension Alignment</span></div>', unsafe_allow_html=True)
@@ -748,7 +788,7 @@ with col1:
                     def _staggered_gen(idx):
                         if idx > 0:
                             time.sleep(0.25 * idx)
-                        return generate_storyboard(prompt=final_prompt, is_first_frame=True, use_live_imagen=live_veo)
+                        return generate_storyboard(prompt=final_prompt, is_first_frame=True, use_live_imagen=live_api)
                     futures = [executor.submit(_staggered_gen, i) for i in range(3)]
                     kfs = []
                     for f in futures:
@@ -794,7 +834,7 @@ with col1:
                             import engine.storyboard
                             importlib.reload(engine.storyboard)
                             from engine.storyboard import generate_storyboard
-                            res = generate_storyboard(prompt=st.session_state["director_final"], is_first_frame=True, use_live_imagen=live_veo)
+                            res = generate_storyboard(prompt=st.session_state["director_final"], is_first_frame=True, use_live_imagen=live_api)
                             st.session_state["director_keyframes"][idx] = res.get("image_path") if isinstance(res, dict) else str(res)
                             st.rerun()
                     
@@ -810,7 +850,7 @@ with col1:
                         def _staggered_regen(idx):
                             if idx > 0:
                                 time.sleep(0.25 * idx)
-                            return generate_storyboard(prompt=st.session_state["director_final"], is_first_frame=True, use_live_imagen=live_veo)
+                            return generate_storyboard(prompt=st.session_state["director_final"], is_first_frame=True, use_live_imagen=live_api)
                         futures = [executor.submit(_staggered_regen, i) for i in range(3)]
                         new_kfs = []
                         for f in futures:
@@ -848,14 +888,13 @@ with col1:
                         first_frame_path=st.session_state["director_selected_kf"],
                         duration_seconds=vid_duration,
                         video_engine="gemini-omni-flash-preview",
-                        use_live_veo=live_veo
+                        use_live_api=live_api
                     )
                     st.session_state["take_history"].append({
                         "take_num": 1,
                         "prompt": st.session_state["director_final"],
                         "video_path": gen_res.get("video_path"),
                         "ledger": None,
-                        "remediated_plan": None,
                         "seed": gen_res.get("seed_used"),
                         "interaction_id": gen_res.get("interaction_id"),
                         "duration": vid_duration
@@ -940,27 +979,16 @@ with col2:
                     pass_rate = (matches / len(ledger) * 100) if ledger else 0
                     avg_set_size = sum(r.get("conformal_set_size", 1) for r in ledger) / len(ledger) if ledger else 1.0
                     
-                    # Log to BigQuery (Fire and forget - Truly Async)
+                    # Log to ClickHouse (Fire and forget - Truly Async)
                     import threading
                     curr_take_num = take["take_num"]
                     curr_ledger = list(take.get("ledger", []))
-                    prev_ledger_snap = st.session_state["take_history"][idx - 1].get("ledger", []) if idx > 0 else []
-                    prev_plan_snap = st.session_state["take_history"][idx - 1].get("remediated_plan") if idx > 0 else None
-                    prev_take_num = st.session_state["take_history"][idx - 1].get("take_num", 1) if idx > 0 else 1
                     scene_id_val = st.session_state.get("scene_id", "demo_scene_01")
 
                     def _bg_log():
                         try:
-                            from database.logger import log_verification_ledger, log_remediation_history_batch
+                            from database.logger import log_verification_ledger
                             log_verification_ledger(scene_id=scene_id_val, take_num=curr_take_num, ledger=curr_ledger)
-                            if idx > 0 and prev_ledger_snap:
-                                log_remediation_history_batch(
-                                    prev_ledger=prev_ledger_snap,
-                                    curr_ledger=curr_ledger,
-                                    plan=prev_plan_snap,
-                                    take_num_before=prev_take_num,
-                                    take_num_after=curr_take_num,
-                                )
                         except Exception as e:
                             print(f"[ClickHouse Logger Error]: {e}")
                     threading.Thread(target=_bg_log, daemon=True).start()
@@ -1053,20 +1081,6 @@ with col2:
                                     s["timestamp_range"] = clean_timestamp_string(str(s.get("timestamp_range", f"0.0s - {take_dur:.1f}s (Whole Clip)")), duration=take_dur)
                                     s.pop("tweak_instruction", None)
                                 take["tweak_suggestions"] = raw_sug
-
-                                # Optional ClickHouse Logging
-                                import threading
-                                def _bg_log_sug():
-                                    try:
-                                        from database.logger import log_tweak_suggestions
-                                        log_tweak_suggestions(
-                                            suggestions=take["tweak_suggestions"],
-                                            session_id=st.session_state.get("scene_id", "demo_session"),
-                                            take_num=take["take_num"]
-                                        )
-                                    except Exception:
-                                        pass
-                                threading.Thread(target=_bg_log_sug, daemon=True).start()
                             except Exception as e:
                                 print(f"[Suggest Tweaks Error]: {e}")
                                 take["tweak_suggestions"] = []
@@ -1254,7 +1268,7 @@ with col2:
                                         first_frame_path=st.session_state.get("director_selected_kf"),
                                         video_engine="gemini-omni-flash-preview",
                                         duration_seconds=vid_duration,
-                                        use_live_veo=live_veo
+                                        use_live_api=live_api
                                     )
                                 else:
                                     # Surgical V2V edit: minimal framework without visual prominence inflators
@@ -1268,7 +1282,7 @@ with col2:
                                         interaction_id=inter_id,
                                         video_engine="gemini-omni-flash-preview",
                                         duration_seconds=vid_duration,
-                                        use_live_veo=live_veo
+                                        use_live_api=live_api
                                     )
                                 new_take = len(st.session_state["take_history"]) + 1
                                 st.session_state["take_history"].append({
@@ -1276,7 +1290,6 @@ with col2:
                                     "prompt": f"[Tweak from Take {take['take_num']}]: {clean_cmd}",
                                     "video_path": res["video_path"],
                                     "ledger": None,
-                                    "remediated_plan": None,
                                     "seed": res.get("seed_used"),
                                     "interaction_id": res.get("interaction_id"),
                                     "duration": vid_duration
@@ -1323,7 +1336,7 @@ with col2:
                             except Exception as e:
                                 st.error(f"Fine-tuning failed: {e}")
                 else:
-                    st.caption("⚠️ No Omni Interaction ID available for this take (generated by Veo or legacy take), conversational fine-tuning unsupported.")
+                    st.caption("⚠️ No Omni Interaction ID available for this take (legacy take), conversational fine-tuning unsupported.")
 
                 if is_latest:
                     st.divider()
@@ -1336,8 +1349,8 @@ with col2:
                                     source_video_path=take["video_path"],
                                     last_frame_path=st.session_state.get("last_frame_path"),
                                     duration_seconds=vid_duration,
-                                    video_engine=vid_engine.split(" ")[0],
-                                    use_live_veo=live_veo
+                                    video_engine="gemini-omni-flash-preview",
+                                    use_live_api=live_api
                                 )
                                 new_take = take["take_num"] + 1
                                 st.session_state["take_history"].append({
@@ -1345,7 +1358,6 @@ with col2:
                                     "prompt": ext_prompt,
                                     "video_path": res["video_path"],
                                     "ledger": None,
-                                    "remediated_plan": None,
                                     "interaction_id": res.get("interaction_id"),
                                     "duration": vid_duration
                                 })

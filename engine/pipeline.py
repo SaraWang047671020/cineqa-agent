@@ -12,20 +12,20 @@ AUTONOMOUS_VERIFY_THRESHOLD = 0.80
 
 # Types meeting empirical precision >= 80% with objective visual certainty
 AUTONOMOUS_CLAIM_TYPES = {
-    "style",             # Visual medium / aesthetic rendering (~95% precision)
+    "style",             # Visual medium / aesthetic rendering (not represented in the 92-row benchmark; classified by judgment, not measurement)
     "color",             # Chromatic palette & color consistency (100% on 92 benchmark rows)
-    "relative_position", # Spatial left/right/above/below with coordinate anchoring (100% on benchmark)
-    "state",             # Static props, wearing, posture (100% on benchmark)
-    "direction",         # Screen-space motion vector traversal (100% on benchmark)
+    "relative_position", # Spatial left/right/above/below with coordinate anchoring (92% on benchmark)
+    "state",             # Static props, wearing, posture (91% on benchmark)
+    "direction",         # Screen-space motion vector traversal (93% on benchmark)
 }
 
-# Types routed to Advisory / Human Review (< 80% threshold or subjective cinematic aesthetics)
+# Types routed to Advisory / Human Review (below threshold, deliberately held back, or subjective cinematic aesthetics)
 HUMAN_REVIEW_CLAIM_TYPES = {
-    "camera",            # Framing and movement aesthetics (handed off to director for aesthetic sign-off)
-    "count",             # Small integer numeration (75% precision on benchmark, dense overlap risk)
-    "action",            # Temporal process, physical contact, fluid dynamics (70% precision on benchmark)
-    "relative_size",     # Depth perspective bounding & optical foreshortening (50% precision on benchmark)
-    "physics_sanity",    # Micro-topology, morphing, mesh clipping (theoretical VLM boundary)
+    "camera",            # Framing and movement aesthetics (not represented in the 92-row benchmark; handed off to director for aesthetic sign-off)
+    "count",             # Small integer numeration (86% on benchmark, but dense-overlap miscount risk — held back deliberately)
+    "action",            # Temporal process, physical contact, fluid dynamics (57% on benchmark)
+    "relative_size",     # Depth perspective bounding & optical foreshortening (67% on benchmark)
+    "physics_sanity",    # Micro-topology, morphing, mesh clipping (not represented in the 92-row benchmark; theoretical VLM boundary)
 }
 
 def stream_pipeline(

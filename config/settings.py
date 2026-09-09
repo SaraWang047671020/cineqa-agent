@@ -118,10 +118,13 @@ class Settings:
                 pass
 
         sa_key = _get_secret_val(["GCP_SERVICE_ACCOUNT_KEY", "gcp_service_account_key"])
-        has_explicit_sa = bool((sa_path and os.path.exists(sa_path)) or sa_key)
+        appdata_adc = os.path.expandvars(r"%APPDATA%\gcloud\application_default_credentials.json")
+        userprofile_adc = os.path.expanduser("~/.config/gcloud/application_default_credentials.json")
+        has_adc = os.path.exists(appdata_adc) or os.path.exists(userprofile_adc)
+        has_explicit_sa = bool((sa_path and os.path.exists(sa_path)) or sa_key or has_adc)
 
-        # Only use Vertex AI if explicitly requested AND an explicit service account key is available,
-        # OR if no Gemini API Key is provided at all and explicit SA exists.
+        # Only use Vertex AI if explicitly requested AND an explicit service account key or ADC is available,
+        # OR if no Gemini API Key is provided at all and explicit SA/ADC exists.
         use_vertex = False
         if self.USE_VERTEX_AI and self.GOOGLE_CLOUD_PROJECT and has_explicit_sa:
             use_vertex = True
