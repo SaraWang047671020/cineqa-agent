@@ -67,6 +67,9 @@ format_prompt.py
 extract.py
 refine_ui.py
 how_we_built_it.md
+demo_script.md
+GOOGLE_CLOUD_SETUP_GUIDE*.md
+PROJECT_ANALYSIS_AND_SCHEDULE.md
 dummy.png
 test_ref.jpg
 ui/app_v2_extracted.py
